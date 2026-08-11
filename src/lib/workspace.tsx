@@ -188,15 +188,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (!cloudConfigured || !supabase) return
     let cancelled = false
     ;(async () => {
-      const { data: auth } = await supabase!.auth.getUser()
-      const user = auth.user
-      if (!user) { if (!cancelled) setState((s) => ({ ...s, loading: false })); return }
-      // Missing table (migration not run yet) or no membership row both resolve
-      // to role null — the personal app then renders exactly as before.
-      const { data, error } = await supabase!.from('workspace_members').select('role').eq('user_id', user.id).maybeSingle()
-      if (cancelled) return
-      const role = !error && data ? (data.role as Role) : null
-      setState({ role, loading: false, configured: true, ready: !error && !!data, userEmail: user.email || '' })
+      try {
+        // getSession reads the locally persisted session — instant, no network
+        // round-trip, and AuthGate has already validated sign-in above us.
+        const { data } = await supabase!.auth.getSession()
+        const user = data.session?.user
+        if (!user) { if (!cancelled) setState((s) => ({ ...s, loading: false })); return }
+        // Missing table (migration not run yet) or no membership row both resolve
+        // to role null — the personal app then renders exactly as before.
+        const { data: member, error } = await supabase!.from('workspace_members').select('role').eq('user_id', user.id).maybeSingle()
+        if (cancelled) return
+        const role = !error && member ? (member.role as Role) : null
+        setState({ role, loading: false, configured: true, ready: !error && !!member, userEmail: user.email || '' })
+      } catch {
+        // Never leave the app stuck on the loading screen — fall back to the
+        // personal app (role null); workspace pages will show their setup card.
+        if (!cancelled) setState((s) => ({ ...s, loading: false }))
+      }
     })()
     return () => { cancelled = true }
   }, [])
