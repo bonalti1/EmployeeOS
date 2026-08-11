@@ -5,8 +5,9 @@ import { IconCheck, IconPlus } from '../../components/icons'
 import { WsShell, BrandBadge, PriorityBadge, wsField } from '../../components/WorkspaceLayout'
 import {
   useWorkspace, useWsTable, useWsSettings, wsTodayISO, fmtWsDate, STAGES, ASSISTANT_NAME,
-  type WsTask, type WsContent, type WsMessage,
+  type WsTask, type WsContent, type WsMessage, type WsJournalEntry,
 } from '../../lib/workspace'
+import { PROMPTS } from './WsJournal'
 
 const PRIORITY_ORDER: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
 
@@ -24,6 +25,7 @@ export default function WsHome() {
   const tasks = useWsTable<WsTask>('ws_tasks')
   const content = useWsTable<WsContent>('ws_content')
   const messages = useWsTable<WsMessage>('ws_messages')
+  const journal = useWsTable<WsJournalEntry>('ws_journal')
   const { settings, set } = useWsSettings()
 
   const [quick, setQuick] = useState('')
@@ -202,6 +204,30 @@ export default function WsHome() {
               {needsApproval} item{needsApproval > 1 ? 's' : ''} waiting for your approval →
             </Link>
           )}
+        </Card>
+
+        {/* Daily journal status */}
+        <Card className="p-5">
+          <SectionTitle to="/workspace/journal">Daily journal</SectionTitle>
+          <ul className="flex flex-col gap-1.5">
+            {PROMPTS.map((p) => {
+              const done = (journal.rows ?? []).some((e) => e.entry_date === today && e.kind === p.kind)
+              return (
+                <li key={p.kind} className="flex items-center gap-2.5 rounded-lg px-2 py-2" style={{ background: 'var(--color-bg)' }}>
+                  <span className="h-4 w-4 rounded grid place-items-center shrink-0"
+                    style={{ border: `2px solid ${done ? '#059669' : 'var(--color-border)'}`, background: done ? '#059669' : 'transparent' }}>
+                    {done && <IconCheck width={11} height={11} style={{ color: '#fff' }} />}
+                  </span>
+                  <span className="text-sm flex-1 min-w-0 truncate" style={{ color: 'var(--color-text)', opacity: done ? 0.55 : 1 }}>{p.title}</span>
+                  {!done && (
+                    <Link to="/workspace/journal" className="text-[11px] font-bold shrink-0" style={{ color: 'var(--color-accent)' }}>
+                      {role === 'assistant' ? 'Record' : 'Not yet'}
+                    </Link>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
         </Card>
 
         {/* Waiting / blocked */}

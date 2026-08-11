@@ -18,6 +18,7 @@ import Settings from './pages/Settings'
 import WsHome from './pages/workspace/WsHome'
 import WsTasks from './pages/workspace/WsTasks'
 import WsContent from './pages/workspace/WsContent'
+import WsJournal from './pages/workspace/WsJournal'
 import WsMedia from './pages/workspace/WsMedia'
 import WsSops from './pages/workspace/WsSops'
 import WsApprovals from './pages/workspace/WsApprovals'
@@ -85,6 +86,7 @@ export default function App() {
             <Route path="/workspace/home" element={<WsHome />} />
             <Route path="/workspace/tasks" element={<WsTasks />} />
             <Route path="/workspace/content" element={<WsContent />} />
+            <Route path="/workspace/journal" element={<WsJournal />} />
             <Route path="/workspace/media" element={<WsMedia />} />
             <Route path="/workspace/sops" element={<WsSops />} />
             <Route path="/workspace/approvals" element={<WsApprovals />} />

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
-import { IconMenu, IconHome, IconTasks, IconFilm, IconSpark } from './icons'
+import { IconMenu, IconHome, IconTasks, IconFilm, IconJournal } from './icons'
 import { Logo } from './Logo'
 import { WS_SECTIONS } from './WorkspaceLayout'
 import { useWorkspace, ASSISTANT_NAME } from '../lib/workspace'
@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase'
 import WsHome from '../pages/workspace/WsHome'
 import WsTasks from '../pages/workspace/WsTasks'
 import WsContent from '../pages/workspace/WsContent'
+import WsJournal from '../pages/workspace/WsJournal'
 import WsMedia from '../pages/workspace/WsMedia'
 import WsSops from '../pages/workspace/WsSops'
 import WsApprovals from '../pages/workspace/WsApprovals'
@@ -113,7 +114,7 @@ const MOBILE_TABS = [
   { to: '/workspace/home', label: 'Home', Icon: IconHome },
   { to: '/workspace/tasks', label: 'Tasks', Icon: IconTasks },
   { to: '/workspace/content', label: 'Content', Icon: IconFilm },
-  { to: '/workspace/ai', label: 'AI', Icon: IconSpark },
+  { to: '/workspace/journal', label: 'Journal', Icon: IconJournal },
 ]
 
 function IconMore({ width = 22, height = 22 }: { width?: number; height?: number }) {
@@ -197,6 +198,7 @@ export default function AssistantApp() {
             <Route path="/workspace/home" element={<WsHome />} />
             <Route path="/workspace/tasks" element={<WsTasks />} />
             <Route path="/workspace/content" element={<WsContent />} />
+            <Route path="/workspace/journal" element={<WsJournal />} />
             <Route path="/workspace/media" element={<WsMedia />} />
             <Route path="/workspace/sops" element={<WsSops />} />
             <Route path="/workspace/approvals" element={<WsApprovals />} />

@@ -30,7 +30,12 @@ That single script:
 - seeds placeholder SOPs, the four media folders, brand-voice fields, and a
   starter daily non-negotiables list — all editable in the app.
 
-Reload the app: you'll now see **Assistant Workspace** in your sidebar under
+Then run **`supabase/02_daily_journal.sql`** the same way. It adds Carlos's
+daily accountability journal (two voice-recordable prompts a day) plus the
+shared `workspace-audio` bucket his recordings are stored in. Your private
+`journal-audio` bucket is untouched.
+
+Reload the app: you'll now see **Carlos's Workspace** in your sidebar under
 "Team".
 
 ## 3. Create the assistant's account

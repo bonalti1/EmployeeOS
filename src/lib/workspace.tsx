@@ -68,6 +68,19 @@ export type WsMessage = {
   created_at: string
 }
 
+export type JournalKind = 'recap' | 'growth'
+
+export type WsJournalEntry = {
+  id: string
+  entry_date: string
+  kind: JournalKind
+  text: string
+  has_audio: boolean
+  duration_ms: number
+  author_role: Role
+  created_at: string
+}
+
 export type WsSop = {
   id: string
   category: string
