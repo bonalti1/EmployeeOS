@@ -13,6 +13,14 @@ import { supabase, cloudConfigured } from './supabase'
 
 export type Role = 'owner' | 'assistant'
 
+/**
+ * The employee's display name — branding for their whole OS ("Carlos
+ * Operating System", sidebar labels, etc.). Deliberately a name, not a job
+ * title: if his role evolves, the OS doesn't need re-labeling — and if the
+ * seat ever changes hands, updating this one constant re-brands everything.
+ */
+export const ASSISTANT_NAME = 'Carlos'
+
 export type WsTask = {
   id: string
   title: string

@@ -198,16 +198,16 @@ where email = 'rolando@alto-realtygroup.com'
 on conflict (user_id) do update set role = 'owner';
 
 -- ---------------------------------------------------------------------------
--- 6) Add your ASSISTANT (run AFTER the assistant has created their account)
+-- 6) Add CARLOS (run AFTER he has created his account)
 -- ---------------------------------------------------------------------------
--- 1. Have your assistant open the app and use "First time? Create your
---    password" with their email.
--- 2. Replace the email below with theirs and run just this statement:
+-- 1. Have Carlos open the app and use "First time? Create your password"
+--    with his email.
+-- 2. Replace the email below with his and run just this statement:
 --
 -- insert into public.workspace_members (user_id, email, name, role)
--- select id, email, 'Assistant', 'assistant'
+-- select id, email, 'Carlos', 'assistant'
 -- from auth.users
--- where email = 'assistant@example.com'
+-- where email = 'carlos@example.com'
 -- on conflict (user_id) do update set role = 'assistant';
 
 -- ---------------------------------------------------------------------------

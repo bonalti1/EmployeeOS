@@ -3,7 +3,7 @@ import { Card, Button, EmptyState } from '../../components/ui'
 import { IconStamp } from '../../components/icons'
 import { WsShell, BrandBadge, wsField } from '../../components/WorkspaceLayout'
 import { useToast } from '../../lib/toast'
-import { useWorkspace, useWsTable, fmtWsDate, type WsContent } from '../../lib/workspace'
+import { useWorkspace, useWsTable, fmtWsDate, ASSISTANT_NAME, type WsContent } from '../../lib/workspace'
 
 /**
  * Approval queue. Content moved to the Review stage lands here for Rolando.
@@ -49,13 +49,13 @@ export default function WsApprovals() {
     <WsShell
       title="Approvals"
       subtitle={role === 'owner'
-        ? 'Content your assistant sent for review — approve or send back with a note'
+        ? `Content ${ASSISTANT_NAME} sent for review — approve or send back with a note`
         : 'What Rolando has approved or sent back'}
     >
       {pending.length === 0 ? (
         <Card className="mb-5">
           <EmptyState icon={<IconStamp width={34} height={34} />} title="Nothing waiting for review"
-            hint={role === 'owner' ? 'When your assistant moves content to Review, it appears here.' : 'Move a content item to Review to send it to Rolando.'} />
+            hint={role === 'owner' ? `When ${ASSISTANT_NAME} moves content to Review, it appears here.` : 'Move a content item to Review to send it to Rolando.'} />
         </Card>
       ) : (
         <div className="grid gap-4 mb-6">
@@ -98,7 +98,7 @@ export default function WsApprovals() {
               {role === 'owner' && (
                 <div className="mt-4 flex flex-col sm:flex-row gap-2">
                   <input value={notes[item.id] || ''} onChange={(e) => setNotes((n) => ({ ...n, [item.id]: e.target.value }))}
-                    placeholder="Optional note to your assistant…"
+                    placeholder={`Optional note to ${ASSISTANT_NAME}…`}
                     className="flex-1 rounded-xl px-3 py-2 text-sm outline-none" style={wsField} />
                   <div className="flex gap-2">
                     <Button onClick={() => void decide(item, true)} style={{ background: '#059669' }}>Approve</Button>

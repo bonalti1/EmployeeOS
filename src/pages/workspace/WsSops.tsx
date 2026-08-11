@@ -3,7 +3,7 @@ import { Card, Button, Input, EmptyState } from '../../components/ui'
 import { IconPlus, IconTrash, IconBook } from '../../components/icons'
 import { WsShell, wsField } from '../../components/WorkspaceLayout'
 import { useConfirmDelete } from '../../lib/confirmDelete'
-import { useWsTable, type WsSop } from '../../lib/workspace'
+import { useWsTable, ASSISTANT_NAME, type WsSop } from '../../lib/workspace'
 
 export const SOP_CATEGORIES = [
   'Daily Operations', 'STB Content', 'ALTO Content', 'Editing',
@@ -42,7 +42,7 @@ export default function WsSops() {
   return (
     <WsShell
       title="SOPs"
-      subtitle="How we do things — the assistant's internal playbook"
+      subtitle={`How we do things — ${ASSISTANT_NAME}’s internal playbook`}
       action={<Button onClick={() => setAdding(true)}><IconPlus width={15} height={15} /> New SOP</Button>}
     >
       <div className="flex gap-1.5 overflow-x-auto pb-1 mb-4" style={{ scrollbarWidth: 'none' }}>

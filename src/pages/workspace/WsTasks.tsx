@@ -4,7 +4,7 @@ import { IconCheck, IconPlus, IconTrash, IconTasks } from '../../components/icon
 import { WsShell, BrandBadge, PriorityBadge, wsField } from '../../components/WorkspaceLayout'
 import { useConfirmDelete } from '../../lib/confirmDelete'
 import {
-  useWorkspace, useWsTable, fmtWsDate, TASK_CATEGORIES, WS_PRIORITIES, type WsTask,
+  useWorkspace, useWsTable, fmtWsDate, TASK_CATEGORIES, WS_PRIORITIES, ASSISTANT_NAME, type WsTask,
 } from '../../lib/workspace'
 
 const LISTS: { id: WsTask['status']; label: string; hint: string }[] = [
@@ -63,7 +63,7 @@ export default function WsTasks() {
   return (
     <WsShell
       title="Tasks"
-      subtitle={role === 'owner' ? 'Anything you add here is assigned to your assistant' : 'Everything on your plate, in one place'}
+      subtitle={role === 'owner' ? `Anything you add here is assigned to ${ASSISTANT_NAME}` : 'Everything on your plate, in one place'}
     >
       {/* List switcher */}
       <div className="flex gap-1.5 overflow-x-auto pb-1 mb-4" style={{ scrollbarWidth: 'none' }}>
@@ -99,7 +99,7 @@ export default function WsTasks() {
             <div className="flex gap-2 mb-3">
               <Input value={draft} onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') void add() }}
-                placeholder={role === 'owner' ? `Assign a task to your assistant (goes to ${list})…` : `Add a task to ${list}…`} />
+                placeholder={role === 'owner' ? `Assign a task to ${ASSISTANT_NAME} (goes to ${list})…` : `Add a task to ${list}…`} />
               <Button onClick={() => void add()}><IconPlus width={15} height={15} /> Add</Button>
             </div>
           )}
@@ -185,7 +185,7 @@ export default function WsTasks() {
               </label>
               <div className="flex justify-between items-center">
                 <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
-                  Added by {selected.assigned_by === 'owner' ? 'Rolando' : 'assistant'}
+                  Added by {selected.assigned_by === 'owner' ? 'Rolando' : ASSISTANT_NAME}
                 </span>
                 <Button variant="ghost" onClick={() => setSelected(null)}>Close</Button>
               </div>

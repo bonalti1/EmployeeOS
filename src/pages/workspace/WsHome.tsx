@@ -4,7 +4,7 @@ import { Card, Button, Input } from '../../components/ui'
 import { IconCheck, IconPlus } from '../../components/icons'
 import { WsShell, BrandBadge, PriorityBadge, wsField } from '../../components/WorkspaceLayout'
 import {
-  useWorkspace, useWsTable, useWsSettings, wsTodayISO, fmtWsDate, STAGES,
+  useWorkspace, useWsTable, useWsSettings, wsTodayISO, fmtWsDate, STAGES, ASSISTANT_NAME,
   type WsTask, type WsContent, type WsMessage,
 } from '../../lib/workspace'
 
@@ -72,8 +72,8 @@ export default function WsHome() {
 
   return (
     <WsShell
-      title={role === 'assistant' ? 'Good day! Here’s the plan' : 'Assistant Workspace'}
-      subtitle={role === 'assistant' ? 'Your daily command center' : 'Shared command center for you and your assistant'}
+      title={role === 'assistant' ? `Good day, ${ASSISTANT_NAME}! Here’s the plan` : `${ASSISTANT_NAME}’s Workspace`}
+      subtitle={role === 'assistant' ? 'Your daily command center' : `Shared command center for you and ${ASSISTANT_NAME}`}
     >
       {/* Quick add */}
       <Card className="p-4 mb-5">
@@ -153,18 +153,18 @@ export default function WsHome() {
 
         {/* Inbox from Rolando */}
         <Card className="p-5">
-          <SectionTitle>{role === 'assistant' ? 'Inbox from Rolando' : 'Notes to your assistant'}</SectionTitle>
+          <SectionTitle>{role === 'assistant' ? 'Inbox from Rolando' : `Notes to ${ASSISTANT_NAME}`}</SectionTitle>
           {role === 'owner' && (
             <div className="flex gap-2 mb-3">
               <Input value={msgDraft} onChange={(e) => setMsgDraft(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') void sendMessage() }}
-                placeholder="Leave a note or request for your assistant…" />
+                placeholder={`Leave a note or request for ${ASSISTANT_NAME}…`} />
               <Button onClick={() => void sendMessage()}>Send</Button>
             </div>
           )}
           {inbox.length === 0 ? (
             <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
-              {role === 'assistant' ? 'No open items from Rolando. 🎉' : 'No open notes — anything you send shows on the assistant’s home screen.'}
+              {role === 'assistant' ? 'No open items from Rolando. 🎉' : `No open notes — anything you send shows on ${ASSISTANT_NAME}’s home screen.`}
             </p>
           ) : (
             <ul className="flex flex-col gap-1.5">

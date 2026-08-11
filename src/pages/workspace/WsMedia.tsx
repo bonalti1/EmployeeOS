@@ -3,7 +3,7 @@ import { Card, Button, Input, EmptyState } from '../../components/ui'
 import { IconPlus, IconTrash, IconFolder, IconLink } from '../../components/icons'
 import { WsShell, BrandBadge, wsField } from '../../components/WorkspaceLayout'
 import { useConfirmDelete } from '../../lib/confirmDelete'
-import { useWsTable, type WsMediaLink } from '../../lib/workspace'
+import { useWsTable, ASSISTANT_NAME, type WsMediaLink } from '../../lib/workspace'
 
 /**
  * Media hub — LINKS ONLY. Video files live in Google Drive; the app never
@@ -92,7 +92,7 @@ export default function WsMedia() {
         <Card className="p-5 md:col-span-2">
           <h2 className="text-[15px] font-semibold mb-3" style={{ color: 'var(--color-text)' }}>Other links</h2>
           {others.length === 0 ? (
-            <EmptyState icon={<IconFolder width={30} height={30} />} title="No other links" hint="Brand kits, logo folders, music libraries — anything else the assistant needs." />
+            <EmptyState icon={<IconFolder width={30} height={30} />} title="No other links" hint={`Brand kits, logo folders, music libraries — anything else ${ASSISTANT_NAME} needs.`} />
           ) : (
             <ul className="flex flex-col gap-1.5">
               {others.map((l) => (

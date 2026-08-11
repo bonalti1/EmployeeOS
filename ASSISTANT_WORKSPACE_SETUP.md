@@ -44,9 +44,9 @@ Reload the app: you'll now see **Assistant Workspace** in your sidebar under
 
 ```sql
 insert into public.workspace_members (user_id, email, name, role)
-select id, email, 'Assistant', 'assistant'
+select id, email, 'Carlos', 'assistant'
 from auth.users
-where email = 'assistant@example.com'
+where email = 'carlos@example.com'
 on conflict (user_id) do update set role = 'assistant';
 ```
 
@@ -56,7 +56,14 @@ on conflict (user_id) do update set role = 'assistant';
    them access to your private rows even via direct API calls.
 
 To revoke access later:
-`delete from public.workspace_members where email = 'assistant@example.com';`
+`delete from public.workspace_members where email = 'carlos@example.com';`
+
+### Renaming the workspace later
+
+The employee's OS is branded by name ("Carlos Operating System"), not by job
+title. If the seat ever changes hands or you want different branding, edit the
+`ASSISTANT_NAME` constant at the top of `src/lib/workspace.tsx` — every label
+across both apps updates from that one line.
 
 ## 4. AI Studio key
 

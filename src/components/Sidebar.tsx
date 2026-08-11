@@ -5,6 +5,7 @@ import {
   IconHealth, IconFamily, IconJournal, IconBell, IconSettings, IconAssistant,
 } from './icons'
 import { useStore } from '../lib/store'
+import { ASSISTANT_NAME } from '../lib/workspace'
 import { Logo } from './Logo'
 
 const MENU = [
@@ -20,7 +21,7 @@ const MENU = [
 ]
 
 const TEAM = [
-  { to: '/workspace/home', label: 'Assistant Workspace', Icon: IconAssistant },
+  { to: '/workspace/home', label: `${ASSISTANT_NAME}’s Workspace`, Icon: IconAssistant },
 ]
 
 const PREFS = [
