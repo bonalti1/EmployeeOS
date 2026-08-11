@@ -142,3 +142,61 @@ export const IconSearch = (p: P) => (
 export const IconCheck = (p: P) => (
   <svg {...base(p)}><path d="m5 12 5 5L20 7" /></svg>
 )
+
+export const IconClipboard = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="5" y="4" width="14" height="17" rx="2" />
+    <path d="M9 4a3 3 0 0 1 6 0" />
+    <path d="M9 11h6M9 15h4" />
+  </svg>
+)
+
+export const IconFilm = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" />
+  </svg>
+)
+
+export const IconFolder = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+  </svg>
+)
+
+export const IconBook = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M4 5a2 2 0 0 1 2-2h13v17H6a2 2 0 0 0-2 2Z" />
+    <path d="M4 20V5" />
+    <path d="M9 7h6" />
+  </svg>
+)
+
+export const IconStamp = (p: P) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="m8.5 12.5 2.5 2.5 5-5.5" />
+  </svg>
+)
+
+export const IconSpark = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M12 3l1.8 4.9L19 9.7l-4.6 1.8L12 16.5l-2.4-5L5 9.7l5.2-1.8L12 3Z" />
+    <path d="M18.5 15.5l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7.7-1.9Z" />
+  </svg>
+)
+
+export const IconInbox = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M3 13v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5" />
+    <path d="M3 13h5l1.5 2.5h5L16 13h5" />
+    <path d="M5.5 13 8 5h8l2.5 8" />
+  </svg>
+)
+
+export const IconLink = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M10 14a5 5 0 0 0 7.1 0l2.4-2.4a5 5 0 1 0-7.1-7.1L11 5.9" />
+    <path d="M14 10a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 1 0 7.1 7.1L13 18.1" />
+  </svg>
+)

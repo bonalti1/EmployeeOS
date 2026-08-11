@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   IconHome, IconTasks, IconWork, IconCompanies, IconPayments, IconCalendar,
-  IconHealth, IconFamily, IconJournal, IconBell, IconSettings,
+  IconHealth, IconFamily, IconJournal, IconBell, IconSettings, IconAssistant,
 } from './icons'
 import { useStore } from '../lib/store'
 import { Logo } from './Logo'
@@ -17,6 +17,10 @@ const MENU = [
   { to: '/health', label: 'Health', Icon: IconHealth },
   { to: '/family', label: 'Family', Icon: IconFamily },
   { to: '/journal', label: 'Journal', Icon: IconJournal },
+]
+
+const TEAM = [
+  { to: '/workspace/home', label: 'Assistant Workspace', Icon: IconAssistant },
 ]
 
 const PREFS = [
@@ -102,6 +106,9 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       {/* Nav fills the remaining height: Menu spreads evenly, Preferences anchored at the bottom. */}
       <div className="flex-1 flex flex-col min-h-0">
         <Section items={MENU} label="Menu" onNavigate={onNavigate} spread />
+        <div className="mt-3">
+          <Section items={TEAM} label="Team" onNavigate={onNavigate} />
+        </div>
         <div className="mt-3">
           <Section items={PREFS} label="Preferences" onNavigate={onNavigate} />
         </div>

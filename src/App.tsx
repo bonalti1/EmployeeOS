@@ -15,6 +15,13 @@ import Family from './pages/Family'
 import Journal from './pages/Journal'
 import Notifications from './pages/Notifications'
 import Settings from './pages/Settings'
+import WsHome from './pages/workspace/WsHome'
+import WsTasks from './pages/workspace/WsTasks'
+import WsContent from './pages/workspace/WsContent'
+import WsMedia from './pages/workspace/WsMedia'
+import WsSops from './pages/workspace/WsSops'
+import WsApprovals from './pages/workspace/WsApprovals'
+import WsAiStudio from './pages/workspace/WsAiStudio'
 
 function useClockShort() {
   const now = new Date()
@@ -55,7 +62,7 @@ export default function App() {
           <span className="ml-auto text-sm tnum font-medium" style={{ color: 'var(--color-muted)' }}>{time}</span>
         </div>
 
-        <div key={location.pathname} className={`${/^\/(home-tasks|work-tasks|companies)/.test(location.pathname) ? 'max-w-[100rem]' : 'max-w-6xl'} mx-auto px-5 sm:px-6 md:px-10 pt-6 md:pt-8 pb-28 lg:pb-8`}>
+        <div key={location.pathname} className={`${/^\/(home-tasks|work-tasks|companies|workspace)/.test(location.pathname) ? 'max-w-[100rem]' : 'max-w-6xl'} mx-auto px-5 sm:px-6 md:px-10 pt-6 md:pt-8 pb-28 lg:pb-8`}>
           <Routes>
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route path="/home" element={<Home />} />
@@ -73,6 +80,15 @@ export default function App() {
             <Route path="/family" element={<Family />} />
             <Route path="/journal" element={<Journal />} />
             <Route path="/assistant" element={<Navigate to="/journal" replace />} />
+            {/* Assistant Workspace — shared area with the assistant (owner view) */}
+            <Route path="/workspace" element={<Navigate to="/workspace/home" replace />} />
+            <Route path="/workspace/home" element={<WsHome />} />
+            <Route path="/workspace/tasks" element={<WsTasks />} />
+            <Route path="/workspace/content" element={<WsContent />} />
+            <Route path="/workspace/media" element={<WsMedia />} />
+            <Route path="/workspace/sops" element={<WsSops />} />
+            <Route path="/workspace/approvals" element={<WsApprovals />} />
+            <Route path="/workspace/ai" element={<WsAiStudio />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/home" replace />} />
