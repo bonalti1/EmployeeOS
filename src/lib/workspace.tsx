@@ -68,6 +68,34 @@ export type WsMessage = {
   created_at: string
 }
 
+export type TrendKind = 'sound' | 'hashtag' | 'format' | 'topic' | 'creator'
+
+export type WsTrend = {
+  id: string
+  kind: TrendKind
+  brand: 'STB' | 'ALTO' | 'Both'
+  label: string
+  url: string
+  notes: string
+  source: string
+  observed_on: string
+  status: 'watching' | 'using' | 'used' | 'passed'
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Trends go stale fast, so freshness is surfaced everywhere and stale entries
+ * are withheld from the AI rather than passed off as current.
+ */
+export const TREND_STALE_DAYS = 21
+export const TREND_FRESH_DAYS = 7
+
+export function trendAgeDays(observedOn: string): number {
+  const then = new Date(observedOn + 'T00:00:00').getTime()
+  return Math.max(0, Math.floor((Date.now() - then) / 86_400_000))
+}
+
 export type JournalKind = 'recap' | 'growth'
 
 export type WsJournalEntry = {

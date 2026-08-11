@@ -35,6 +35,10 @@ daily accountability journal (two voice-recordable prompts a day) plus the
 shared `workspace-audio` bucket his recordings are stored in. Your private
 `journal-audio` bucket is untouched.
 
+Finally run **`supabase/03_trend_board.sql`**. It adds the Trend Board — where
+Carlos logs weekly platform research that AI Studio then drafts from — and
+seeds the "Weekly Trend Research" SOP.
+
 Reload the app: you'll now see **Carlos's Workspace** in your sidebar under
 "Team".
 
@@ -76,8 +80,17 @@ AI Studio reuses the same `OPENAI_API_KEY` Netlify environment variable as
 your Journal AI (see `.env.example`). If it's already set, AI Studio works
 immediately. The key stays server-side in the Netlify function
 (`netlify/functions/assistant-ai.ts`) — never in the browser. The AI receives
-only the shared brand context you edit in AI Studio, never your private
-Personal OS data, and it has no live TikTok/Instagram trend access.
+only the shared brand context you edit in AI Studio plus the trends Carlos
+logs on the Trend Board — never your private Personal OS data.
+
+**On trends:** there is no live TikTok/Instagram feed wired in, because no
+official trends API is available to a business (TikTok's Research API is
+limited to academics and nonprofits) and scraper services break constantly.
+Instead Carlos does a 15-minute weekly pass through TikTok's free Creative
+Center and logs what he finds, each entry dated. AI Studio drafts from that
+research and ignores anything older than 21 days. If you later want to
+automate the collection, only the ingestion changes — the board and the AI
+wiring stay as they are.
 
 ## 5. What's shared vs. private
 

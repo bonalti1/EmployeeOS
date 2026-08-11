@@ -22,6 +22,7 @@ const TOOLS: Record<string, string> = {
   caption: 'Draft 3 caption options for the given content, each with a different tone. Include a natural call to action and 5–8 relevant hashtags per option.',
   repurpose: 'Take the given content and repurpose it: suggest 5 other formats/angles (e.g. carousel, before/after, FAQ clip, testimonial cut, photo post) with a short outline for each.',
   transcript: 'Read the given transcript or description of footage and extract 8–12 content ideas from it. For each: a working title, the moment/quote to build on, and the suggested format. Number them.',
+  trends: 'Using the RESEARCHED TRENDS listed below, propose 8 content ideas that ride them for this brand. For each: which trend it uses, the working title, the hook, and the format. Only use trends that genuinely fit the brand — say plainly which ones you skipped and why.',
 }
 
 const SYSTEM = `You are the content co-pilot inside a private workspace for a Personal Assistant / Content Creator who works for Rolando.
@@ -30,13 +31,18 @@ The team creates content for two companies:
 - ALTO Pro — real estate.
 Use the COMPANY CONTEXT and BRAND VOICE provided below as ground truth; if a section says "EDIT ME" treat it as unspecified and use a sensible neutral professional voice.
 Be concrete and immediately usable — the assistant should be able to copy your output straight into the content pipeline.
-Never claim to know current platform trends, algorithm behavior, or live TikTok/Instagram data — you have no live research access. Base suggestions on timeless content principles and the provided context only.
+You have NO live access to TikTok, Instagram, or any platform data, and no browsing. Never claim to know what is currently trending on your own.
+The one exception is the RESEARCHED TRENDS section, when present: those were logged by hand by the team, each with the date it was observed. Treat them as dated human observations, not live data — and if a trend looks old relative to the dates given, say so rather than assuming it still applies.
+Otherwise base suggestions on timeless content principles and the provided context.
 Reply in plain text (no markdown headers).`
 
 export default async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
-  let payload: { tool?: string; brand?: string; input?: string; context?: { companyContext?: string; brandVoice?: string } }
+  let payload: {
+    tool?: string; brand?: string; input?: string
+    context?: { companyContext?: string; brandVoice?: string; trends?: string }
+  }
   try {
     payload = await req.json()
   } catch {
@@ -47,7 +53,11 @@ export default async (req: Request): Promise<Response> => {
   const instruction = TOOLS[tool]
   if (!instruction) return json({ error: 'Unknown tool' }, 400)
   const input = (payload.input || '').trim().slice(0, 8000)
-  if (!input) return json({ error: 'Missing input' }, 400)
+  // The trends tool works off the logged research, so a free-text brief is optional there.
+  if (!input && tool !== 'trends') return json({ error: 'Missing input' }, 400)
+  if (tool === 'trends' && !(payload.context?.trends || '').trim()) {
+    return json({ error: 'no_trends', message: 'No fresh trends are logged yet — add some on the Trend Board first.' }, 200)
+  }
 
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return json({ error: 'not_configured', message: 'The AI key is not set up yet.' }, 200)
@@ -55,12 +65,17 @@ export default async (req: Request): Promise<Response> => {
 
   const brand = payload.brand === 'ALTO' ? 'ALTO Pro' : payload.brand === 'STB' ? 'South Texas Builders (STB)' : 'both brands'
   const ctx = payload.context || {}
+  const trends = (ctx.trends || '').trim().slice(0, 4000)
   const user = [
     `TASK: ${instruction}`,
     `TARGET BRAND: ${brand}`,
+    `TODAY'S DATE: ${new Date().toISOString().slice(0, 10)}`,
     `COMPANY CONTEXT:\n${(ctx.companyContext || '(not provided)').slice(0, 4000)}`,
     `BRAND VOICE:\n${(ctx.brandVoice || '(not provided)').slice(0, 4000)}`,
-    `ASSISTANT'S INPUT:\n${input}`,
+    trends
+      ? `RESEARCHED TRENDS (logged by hand by the team; each line ends with the date it was observed):\n${trends}`
+      : 'RESEARCHED TRENDS: none logged — do not speculate about what is trending.',
+    `ASSISTANT'S INPUT:\n${input || '(none — work from the trends above)'}`,
   ].join('\n\n')
 
   try {

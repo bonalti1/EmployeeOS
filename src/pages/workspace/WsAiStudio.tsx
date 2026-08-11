@@ -1,9 +1,13 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Card, Button } from '../../components/ui'
 import { IconSpark } from '../../components/icons'
 import { WsShell, wsField } from '../../components/WorkspaceLayout'
 import { useToast } from '../../lib/toast'
-import { useWorkspace, useWsSettings, useWsTable, type WsContent } from '../../lib/workspace'
+import {
+  useWorkspace, useWsSettings, useWsTable, trendAgeDays, TREND_STALE_DAYS,
+  type WsContent, type WsTrend,
+} from '../../lib/workspace'
 
 /**
  * AI Studio — drafting tools for the assistant. Calls the Netlify function
@@ -19,6 +23,7 @@ const TOOLS = [
   { id: 'caption', label: 'Draft captions', hint: 'What the post shows', placeholder: 'e.g. before/after of the Garcia backyard patio build' },
   { id: 'repurpose', label: 'Repurpose content', hint: 'The existing content to repurpose', placeholder: 'Paste the script/caption of a piece that performed well…' },
   { id: 'transcript', label: 'Transcript → ideas', hint: 'Paste a transcript or describe the footage', placeholder: 'Paste a video transcript, or describe what was filmed…' },
+  { id: 'trends', label: 'Ride a trend', hint: 'Optional steer — otherwise it works straight from the Trend Board', placeholder: 'e.g. focus on the cost-breakdown angle, or leave blank…' },
 ] as const
 
 type ToolId = (typeof TOOLS)[number]['id']
@@ -28,6 +33,7 @@ export default function WsAiStudio() {
   const { toast } = useToast()
   const { settings, set, loaded } = useWsSettings()
   const content = useWsTable<WsContent>('ws_content')
+  const trends = useWsTable<WsTrend>('ws_trends', 'observed_on', false)
 
   const [tool, setTool] = useState<ToolId>('brainstorm')
   const [brand, setBrand] = useState<'STB' | 'ALTO'>('STB')
@@ -40,9 +46,28 @@ export default function WsAiStudio() {
 
   const activeTool = TOOLS.find((t) => t.id === tool)!
 
+  /**
+   * Trends handed to the model: current brand, not stale, not already used or
+   * passed. Each line carries its observed date so the model can judge age
+   * rather than assume everything is live.
+   */
+  const activeTrends = (trends.rows ?? []).filter((t) =>
+    (t.brand === brand || t.brand === 'Both') &&
+    t.status !== 'used' && t.status !== 'passed' &&
+    trendAgeDays(t.observed_on) <= TREND_STALE_DAYS,
+  )
+
+  const trendContext = activeTrends
+    .map((t) => `- [${t.kind}] ${t.label}${t.notes ? ` — ${t.notes}` : ''} (observed ${t.observed_on})`)
+    .join('\n')
+
   const run = async () => {
     const text = input.trim()
-    if (!text) { setError('Describe what you need first.'); return }
+    if (!text && tool !== 'trends') { setError('Describe what you need first.'); return }
+    if (tool === 'trends' && activeTrends.length === 0) {
+      setError('No fresh trends logged for this brand yet — add some on the Trend Board first.')
+      return
+    }
     setBusy(true)
     setError('')
     setResult('')
@@ -57,11 +82,13 @@ export default function WsAiStudio() {
           context: {
             companyContext: settings['company_context'] || '',
             brandVoice: brand === 'STB' ? settings['brand_voice_stb'] || '' : settings['brand_voice_alto'] || '',
+            trends: trendContext,
           },
         }),
       })
       const data = (await res.json()) as { result?: string; error?: string; message?: string }
       if (data.error === 'not_configured') setError('The AI key isn’t set up yet — add OPENAI_API_KEY in Netlify (same key as the Journal AI).')
+      else if (data.error === 'no_trends') setError(data.message || 'No fresh trends logged yet.')
       else if (data.error || !data.result) setError(data.message || 'The AI had trouble responding. Try again.')
       else setResult(data.result)
     } catch {
@@ -129,7 +156,9 @@ export default function WsAiStudio() {
                 <IconSpark width={15} height={15} /> {busy ? 'Thinking…' : activeTool.label}
               </Button>
               <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
-                No live trend data — drafts are based on your brand context.
+                {activeTrends.length > 0
+                  ? `Using your brand context + ${activeTrends.length} researched trend${activeTrends.length === 1 ? '' : 's'}. No live platform data.`
+                  : 'Using your brand context. No live platform data — log findings on the Trend Board to feed it real research.'}
               </span>
             </div>
           </Card>
@@ -147,6 +176,35 @@ export default function WsAiStudio() {
             </Card>
           )}
         </div>
+
+        <div className="flex flex-col gap-5">
+        {/* What research is actually in play right now */}
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-[15px] font-semibold" style={{ color: 'var(--color-text)' }}>Trends in play</h2>
+            <Link to="/workspace/trends" className="text-xs font-semibold" style={{ color: 'var(--color-accent)' }}>Trend Board</Link>
+          </div>
+          {activeTrends.length === 0 ? (
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--color-muted)' }}>
+              Nothing fresh logged for {brand === 'STB' ? 'South Texas Builders' : 'ALTO Pro'} yet. Spend 15 minutes on
+              the Trend Board and every tool here gets sharper.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {activeTrends.slice(0, 6).map((t) => (
+                <li key={t.id} className="flex items-start gap-2 rounded-lg px-2 py-1.5" style={{ background: 'var(--color-bg)' }}>
+                  <span className="text-[9px] font-bold px-1 py-0.5 rounded uppercase shrink-0 mt-0.5"
+                    style={{ background: 'var(--color-surface)', color: 'var(--color-muted)' }}>{t.kind}</span>
+                  <span className="text-xs flex-1 min-w-0 truncate" style={{ color: 'var(--color-text)' }}>{t.label}</span>
+                  <span className="text-[10px] shrink-0 tnum" style={{ color: 'var(--color-muted)' }}>{trendAgeDays(t.observed_on)}d</span>
+                </li>
+              ))}
+              {activeTrends.length > 6 && (
+                <li className="text-[11px] px-2" style={{ color: 'var(--color-muted)' }}>+{activeTrends.length - 6} more</li>
+              )}
+            </ul>
+          )}
+        </Card>
 
         {/* Brand context — the ground truth the AI uses */}
         <Card className="p-5 h-fit">
@@ -205,6 +263,7 @@ export default function WsAiStudio() {
             </div>
           )}
         </Card>
+        </div>
       </div>
     </WsShell>
   )

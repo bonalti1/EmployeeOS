@@ -200,3 +200,10 @@ export const IconLink = (p: P) => (
     <path d="M14 10a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 1 0 7.1 7.1L13 18.1" />
   </svg>
 )
+
+export const IconTrend = (p: P) => (
+  <svg {...base(p)}>
+    <path d="m3 17 6-6 4 4 8-8" />
+    <path d="M15 7h6v6" />
+  </svg>
+)
