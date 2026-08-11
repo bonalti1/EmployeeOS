@@ -1,0 +1,14 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# SPA fallback for React Router. Netlify resolves function routes
+# (/.netlify/functions/*) before this catch-all, so the API still works.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
