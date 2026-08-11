@@ -10,6 +10,8 @@ import WsTasks from '../pages/workspace/WsTasks'
 import WsContent from '../pages/workspace/WsContent'
 import WsJournal from '../pages/workspace/WsJournal'
 import WsTrends from '../pages/workspace/WsTrends'
+import WsIdeas from '../pages/workspace/WsIdeas'
+import IdeaCapture from './IdeaCapture'
 import WsMedia from '../pages/workspace/WsMedia'
 import WsSops from '../pages/workspace/WsSops'
 import WsApprovals from '../pages/workspace/WsApprovals'
@@ -199,6 +201,7 @@ export default function AssistantApp() {
             <Route path="/workspace/home" element={<WsHome />} />
             <Route path="/workspace/tasks" element={<WsTasks />} />
             <Route path="/workspace/content" element={<WsContent />} />
+            <Route path="/workspace/ideas" element={<WsIdeas />} />
             <Route path="/workspace/trends" element={<WsTrends />} />
             <Route path="/workspace/journal" element={<WsJournal />} />
             <Route path="/workspace/media" element={<WsMedia />} />
@@ -211,6 +214,7 @@ export default function AssistantApp() {
         </div>
       </main>
 
+      <IdeaCapture />
       <AssistantBottomNav onMore={() => setMobileOpen(true)} />
     </div>
   )

@@ -16,7 +16,9 @@ const STORE = 'audio'
 const VERSION = 1
 const BUCKET = 'workspace-audio'
 
-const remotePath = (id: string) => `journal/${id}`
+/** Folder inside the shared bucket — keeps journal recaps and idea notes apart. */
+export type WsAudioFolder = 'journal' | 'ideas'
+const remotePath = (id: string, folder: WsAudioFolder) => `${folder}/${id}`
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -57,27 +59,27 @@ async function getLocal(id: string): Promise<Blob | null> {
  * only marks an entry as having audio once it's actually in the cloud — a
  * recap that never uploaded would be invisible to the owner.
  */
-export async function putWsAudio(id: string, blob: Blob): Promise<boolean> {
+export async function putWsAudio(id: string, blob: Blob, folder: WsAudioFolder = 'journal'): Promise<boolean> {
   try { await putLocal(id, blob) } catch { /* cache is best-effort */ }
   if (!supabase) return false
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(remotePath(id), blob, { upsert: true, contentType: blob.type || 'audio/webm' })
+    .upload(remotePath(id, folder), blob, { upsert: true, contentType: blob.type || 'audio/webm' })
   return !error
 }
 
-export async function getWsAudio(id: string): Promise<Blob | null> {
+export async function getWsAudio(id: string, folder: WsAudioFolder = 'journal'): Promise<Blob | null> {
   const local = await getLocal(id)
   if (local) return local
   if (!supabase) return null
   try {
-    const { data } = await supabase.storage.from(BUCKET).download(remotePath(id))
+    const { data } = await supabase.storage.from(BUCKET).download(remotePath(id, folder))
     if (data) { try { await putLocal(id, data) } catch { /* ignore */ } return data }
   } catch { /* offline */ }
   return null
 }
 
-export async function delWsAudio(id: string): Promise<void> {
+export async function delWsAudio(id: string, folder: WsAudioFolder = 'journal'): Promise<void> {
   try {
     const db = await openDB()
     await new Promise<void>((resolve) => {
@@ -88,5 +90,5 @@ export async function delWsAudio(id: string): Promise<void> {
     })
     db.close()
   } catch { /* ignore */ }
-  if (supabase) { try { await supabase.storage.from(BUCKET).remove([remotePath(id)]) } catch { /* ignore */ } }
+  if (supabase) { try { await supabase.storage.from(BUCKET).remove([remotePath(id, folder)]) } catch { /* ignore */ } }
 }

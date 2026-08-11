@@ -68,6 +68,23 @@ export type WsMessage = {
   created_at: string
 }
 
+export type WsIdea = {
+  id: string
+  text: string
+  note: string
+  category: 'Unsorted' | 'Content' | 'Marketing' | 'Business' | 'Process'
+  brand: 'STB' | 'ALTO' | 'Both' | 'Internal'
+  status: 'new' | 'exploring' | 'doing' | 'shipped' | 'parked'
+  starred: boolean
+  has_audio: boolean
+  author_role: Role
+  promoted_to: string
+  created_at: string
+  updated_at: string
+}
+
+export const IDEA_CATEGORIES = ['Unsorted', 'Content', 'Marketing', 'Business', 'Process'] as const
+
 export type TrendKind = 'sound' | 'hashtag' | 'format' | 'topic' | 'creator'
 
 export type WsTrend = {

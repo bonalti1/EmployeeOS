@@ -35,9 +35,13 @@ daily accountability journal (two voice-recordable prompts a day) plus the
 shared `workspace-audio` bucket his recordings are stored in. Your private
 `journal-audio` bucket is untouched.
 
-Finally run **`supabase/03_trend_board.sql`**. It adds the Trend Board — where
+Then run **`supabase/03_trend_board.sql`**. It adds the Trend Board — where
 Carlos logs weekly platform research that AI Studio then drafts from — and
 seeds the "Weekly Trend Research" SOP.
+
+Finally run **`supabase/04_idea_board.sql`** for the shared Idea Board (the
+floating **+** capture button and its voice notes). Run file 02 first if you
+haven't — idea voice notes share that file's `workspace-audio` bucket.
 
 Reload the app: you'll now see **Carlos's Workspace** in your sidebar under
 "Team".

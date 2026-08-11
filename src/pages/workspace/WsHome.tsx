@@ -5,7 +5,7 @@ import { IconCheck, IconPlus } from '../../components/icons'
 import { WsShell, BrandBadge, PriorityBadge, wsField } from '../../components/WorkspaceLayout'
 import {
   useWorkspace, useWsTable, useWsSettings, wsTodayISO, fmtWsDate, STAGES, ASSISTANT_NAME,
-  type WsTask, type WsContent, type WsMessage, type WsJournalEntry,
+  type WsTask, type WsContent, type WsMessage, type WsJournalEntry, type WsIdea,
 } from '../../lib/workspace'
 import { PROMPTS } from './WsJournal'
 
@@ -26,6 +26,7 @@ export default function WsHome() {
   const content = useWsTable<WsContent>('ws_content')
   const messages = useWsTable<WsMessage>('ws_messages')
   const journal = useWsTable<WsJournalEntry>('ws_journal')
+  const ideas = useWsTable<WsIdea>('ws_ideas')
   const { settings, set } = useWsSettings()
 
   const [quick, setQuick] = useState('')
@@ -203,6 +204,31 @@ export default function WsHome() {
               style={{ background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', color: 'var(--color-accent)' }}>
               {needsApproval} item{needsApproval > 1 ? 's' : ''} waiting for your approval →
             </Link>
+          )}
+        </Card>
+
+        {/* Fresh ideas — surfaced so the board doesn't become a write-only pile */}
+        <Card className="p-5">
+          <SectionTitle to="/workspace/ideas">Latest ideas</SectionTitle>
+          {(ideas.rows ?? []).filter((i) => i.status !== 'shipped' && i.status !== 'parked').length === 0 ? (
+            <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
+              No open ideas. Tap the <b>+</b> button (bottom right) any time one hits you — type it or say it.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {(ideas.rows ?? [])
+                .filter((i) => i.status !== 'shipped' && i.status !== 'parked')
+                .slice(0, 5)
+                .map((i) => (
+                  <li key={i.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5" style={{ background: 'var(--color-bg)' }}>
+                    {i.starred && <span className="shrink-0 text-[13px] leading-none" style={{ color: '#f59e0b' }}>★</span>}
+                    <Link to="/workspace/ideas" className="text-sm flex-1 min-w-0 truncate" style={{ color: 'var(--color-text)' }}>{i.text}</Link>
+                    <span className="text-[10px] shrink-0" style={{ color: 'var(--color-muted)' }}>
+                      {i.author_role === 'owner' ? 'Rolando' : ASSISTANT_NAME}
+                    </span>
+                  </li>
+                ))}
+            </ul>
           )}
         </Card>
 

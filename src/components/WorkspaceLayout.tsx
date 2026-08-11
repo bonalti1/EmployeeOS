@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { Card, PageHeader } from './ui'
-import { IconHome, IconTasks, IconFilm, IconFolder, IconBook, IconStamp, IconSpark, IconJournal, IconTrend } from './icons'
+import { IconHome, IconTasks, IconFilm, IconFolder, IconBook, IconStamp, IconSpark, IconJournal, IconTrend, IconBulb } from './icons'
 import { useWorkspace, BRAND_COLORS } from '../lib/workspace'
 
 /**
@@ -14,6 +14,7 @@ import { useWorkspace, BRAND_COLORS } from '../lib/workspace'
 export const WS_SECTIONS = [
   { to: '/workspace/home', label: 'Home', Icon: IconHome },
   { to: '/workspace/tasks', label: 'Tasks', Icon: IconTasks },
+  { to: '/workspace/ideas', label: 'Ideas', Icon: IconBulb },
   { to: '/workspace/content', label: 'Content', Icon: IconFilm },
   { to: '/workspace/trends', label: 'Trends', Icon: IconTrend },
   { to: '/workspace/journal', label: 'Journal', Icon: IconJournal },
