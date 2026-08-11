@@ -215,3 +215,11 @@ export const IconBulb = (p: P) => (
     <path d="M12 3a6 6 0 0 0-3.6 10.8c.5.4.8.9.9 1.5l.1.7h5.2l.1-.7c.1-.6.4-1.1.9-1.5A6 6 0 0 0 12 3Z" />
   </svg>
 )
+
+export const IconMegaphone = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M3 10v4a1 1 0 0 0 1 1h2l4 4V5L6 9H4a1 1 0 0 0-1 1Z" />
+    <path d="M14 7c1.5 1.2 1.5 8.8 0 10" />
+    <path d="M17.5 4.5c3 2.8 3 12.2 0 15" />
+  </svg>
+)

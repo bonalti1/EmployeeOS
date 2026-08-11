@@ -9,6 +9,7 @@ import {
   useWorkspace, useWsTable, ASSISTANT_NAME, IDEA_CATEGORIES,
   type WsIdea, type WsContent, type WsTask,
 } from '../../lib/workspace'
+import { supabase } from '../../lib/supabase'
 
 /**
  * Idea Board — the shared scratchpad.
@@ -95,6 +96,24 @@ export default function WsIdeas() {
     } as Partial<WsContent>)
     await update(idea.id, { status: 'shipped', promoted_to: 'content' } as Partial<WsIdea>)
     toast('Sent to Content → Ideas')
+  }
+
+  /** Promote into Marketing Studio as a company-scoped marketing idea. */
+  const toCampaign = async (idea: WsIdea) => {
+    if (!supabase) return
+    const slug = idea.brand === 'ALTO' ? 'alto' : 'stb'
+    const { data: companies } = await supabase.from('mkt_companies').select('id').eq('slug', slug).limit(1)
+    const companyId = companies?.[0]?.id
+    if (!companyId) { toast('Run the Marketing Studio SQL first (supabase/05_marketing_studio.sql)'); return }
+    await supabase.from('mkt_ideas').insert({
+      company_id: companyId,
+      title: idea.text.slice(0, 80),
+      raw_idea: idea.text,
+      notes: idea.note,
+      author_role: idea.author_role,
+    })
+    await update(idea.id, { status: 'shipped', promoted_to: 'campaign' } as Partial<WsIdea>)
+    toast(`Sent to Marketing Studio → ${slug === 'alto' ? 'ALTO Pro' : 'South Texas Builders'}`)
   }
 
   const toTask = async (idea: WsIdea) => {
@@ -191,7 +210,7 @@ export default function WsIdeas() {
                 {idea.promoted_to && (
                   <p className="text-[11px] mt-2 flex items-center gap-1" style={{ color: '#059669' }}>
                     <IconCheck width={11} height={11} />
-                    Became a {idea.promoted_to === 'content' ? 'content item' : 'task'}
+                    Became a {idea.promoted_to === 'content' ? 'content item' : idea.promoted_to === 'campaign' ? 'marketing campaign idea' : 'task'}
                   </p>
                 )}
 
@@ -220,6 +239,7 @@ export default function WsIdeas() {
 
                     <div className="flex items-center gap-1.5">
                       <Button variant="outline" className="text-xs px-2.5 py-1.5" onClick={() => void toContent(idea)}>→ Content</Button>
+                      <Button variant="outline" className="text-xs px-2.5 py-1.5" onClick={() => void toCampaign(idea)}>→ Campaign</Button>
                       <Button variant="outline" className="text-xs px-2.5 py-1.5" onClick={() => void toTask(idea)}>→ Task</Button>
                       <button
                         onClick={() => confirmDelete({

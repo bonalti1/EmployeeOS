@@ -4,10 +4,42 @@ import { Card, Button } from '../../components/ui'
 import { IconSpark } from '../../components/icons'
 import { WsShell, wsField } from '../../components/WorkspaceLayout'
 import { useToast } from '../../lib/toast'
+import { useEffect } from 'react'
 import {
   useWorkspace, useWsSettings, useWsTable, trendAgeDays, TREND_STALE_DAYS,
   type WsContent, type WsTrend,
 } from '../../lib/workspace'
+import { supabase } from '../../lib/supabase'
+
+/**
+ * Brand voice source of truth: if Marketing Studio's Brand DNA has a voice
+ * section for a company, it wins; the legacy ws_settings fields remain the
+ * fallback so nothing breaks before the marketing SQL is run.
+ */
+function useBrandDnaVoice() {
+  const [voices, setVoices] = useState<Record<string, string>>({})
+  useEffect(() => {
+    if (!supabase) return
+    void (async () => {
+      const { data: companies, error } = await supabase!.from('mkt_companies').select('id, slug')
+      if (error || !companies?.length) return
+      const { data: profiles } = await supabase!.from('mkt_brand_profiles').select('company_id, identity, voice')
+      if (!profiles) return
+      const out: Record<string, string> = {}
+      for (const c of companies) {
+        const p = profiles.find((x) => x.company_id === c.id) as { identity?: Record<string, string>; voice?: Record<string, string> } | undefined
+        if (!p) continue
+        const parts: string[] = []
+        for (const [k, v] of Object.entries({ ...(p.identity ?? {}), ...(p.voice ?? {}) })) {
+          if (typeof v === 'string' && v.trim()) parts.push(`${k.replace(/_/g, ' ')}: ${v}`)
+        }
+        if (parts.length) out[c.slug] = parts.join('\n')
+      }
+      setVoices(out)
+    })()
+  }, [])
+  return voices
+}
 
 /**
  * AI Studio — drafting tools for the assistant. Calls the Netlify function
@@ -34,6 +66,7 @@ export default function WsAiStudio() {
   const { settings, set, loaded } = useWsSettings()
   const content = useWsTable<WsContent>('ws_content')
   const trends = useWsTable<WsTrend>('ws_trends', 'observed_on', false)
+  const dnaVoices = useBrandDnaVoice()
 
   const [tool, setTool] = useState<ToolId>('brainstorm')
   const [brand, setBrand] = useState<'STB' | 'ALTO'>('STB')
@@ -81,7 +114,9 @@ export default function WsAiStudio() {
           input: text,
           context: {
             companyContext: settings['company_context'] || '',
-            brandVoice: brand === 'STB' ? settings['brand_voice_stb'] || '' : settings['brand_voice_alto'] || '',
+            // Marketing Studio Brand DNA wins when it exists; legacy fields otherwise.
+            brandVoice: (brand === 'STB' ? dnaVoices['stb'] : dnaVoices['alto'])
+              || (brand === 'STB' ? settings['brand_voice_stb'] || '' : settings['brand_voice_alto'] || ''),
             trends: trendContext,
           },
         }),
