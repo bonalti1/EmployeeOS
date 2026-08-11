@@ -76,6 +76,13 @@ export default async (req: Request): Promise<Response> => {
 
   const ad = body.staticAd || {}
   const visual = company.brand.visual_brand || {}
+  // Exact brand palette from the Brand Kit — hex values steer the model far
+  // better than color names.
+  const palette = [
+    visual.color_primary && `primary ${visual.color_primary}`,
+    visual.color_secondary && `secondary ${visual.color_secondary}`,
+    visual.color_accent && `accent ${visual.color_accent}`,
+  ].filter(Boolean).join(', ')
   const prompt = [
     `Professional static marketing ad image for ${company.name}.`,
     ad.visualConcept ? `Visual concept: ${ad.visualConcept}` : '',
@@ -84,9 +91,12 @@ export default async (req: Request): Promise<Response> => {
     ad.headline ? `Leave clean space for a headline that will read: "${ad.headline}"` : '',
     visual.image_style ? `Image style: ${visual.image_style}` : '',
     visual.photography_style ? `Photography style: ${visual.photography_style}` : '',
-    visual.colors ? `Brand colors: ${visual.colors}` : '',
+    palette ? `Use this exact brand color palette prominently: ${palette}.` : '',
     visual.avoid ? `Do NOT produce: ${visual.avoid}` : '',
-    'No gibberish text, no fake logos, no watermarks. Photorealistic unless the style says otherwise.',
+    visual.logo_url
+      ? 'Reserve a clean, uncluttered corner area where the company logo will be overlaid in editing — do NOT attempt to draw the logo itself.'
+      : '',
+    'No gibberish text, no fake or invented logos, no watermarks. Photorealistic unless the style says otherwise.',
     MARKETING_GUARDRAILS,
   ].filter(Boolean).join('\n')
 

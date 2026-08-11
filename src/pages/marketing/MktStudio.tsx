@@ -1,6 +1,6 @@
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { WsShell } from '../../components/WorkspaceLayout'
-import { MktCompanyProvider, useMktCompany } from '../../lib/marketing'
+import { MktCompanyProvider, useMktCompany, useBrandKits } from '../../lib/marketing'
 import MktIdeas from './MktIdeas'
 import MktIdeaStudio from './MktIdeaStudio'
 import MktCampaigns from './MktCampaigns'
@@ -24,6 +24,7 @@ const SECTIONS = [
 
 function CompanyTabs() {
   const { companies, company, setCompanyId, loading } = useMktCompany()
+  const kits = useBrandKits()
   if (loading) return null
   if (companies.length === 0) {
     return (
@@ -33,21 +34,31 @@ function CompanyTabs() {
     )
   }
   return (
-    <div className="flex items-center gap-2 mb-4">
+    <div className="flex items-center gap-2 mb-4 flex-wrap">
       {companies.map((c) => {
         const active = company?.id === c.id
+        const kit = kits[c.id]
+        // A company with a saved primary color gets its own color as the active
+        // tab — switching tabs literally changes rooms.
+        const activeBg = kit?.primary || 'var(--color-accent)'
         return (
           <button
             key={c.id}
             onClick={() => setCompanyId(c.id)}
-            className="px-4 py-2 rounded-xl text-sm font-bold transition"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition"
             style={{
-              background: active ? 'var(--color-accent)' : 'var(--color-surface)',
-              color: active ? 'var(--color-on-accent)' : 'var(--color-muted)',
-              border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
+              background: active ? activeBg : 'var(--color-surface)',
+              color: active ? '#ffffff' : 'var(--color-muted)',
+              border: `1px solid ${active ? activeBg : 'var(--color-border)'}`,
               boxShadow: active ? 'var(--shadow-md)' : 'none',
             }}
           >
+            {kit?.logo && (
+              <span className="h-5 w-5 rounded grid place-items-center overflow-hidden shrink-0"
+                style={{ background: active ? 'rgba(255,255,255,0.9)' : 'transparent' }}>
+                <img src={kit.logo} alt="" className="max-h-full max-w-full object-contain" />
+              </span>
+            )}
             {c.name}
           </button>
         )

@@ -207,14 +207,27 @@ export const BRAND_SECTIONS: { key: BrandSectionKey; label: string; hint: string
     ],
   },
   {
-    key: 'visual_brand', label: 'Visual Brand', hint: 'Feeds image generation',
+    key: 'visual_brand', label: 'Visual Brand', hint: 'Feeds image generation — logo and colors are set in the Brand Kit above',
     fields: [
-      { k: 'logo_urls', label: 'Logo URLs' }, { k: 'colors', label: 'Colors' }, { k: 'fonts', label: 'Fonts' },
+      { k: 'fonts', label: 'Fonts' },
       { k: 'image_style', label: 'Image style' }, { k: 'photography_style', label: 'Photography style' },
       { k: 'approved_examples', label: 'Examples of approved creative' }, { k: 'avoid', label: 'Creative we do NOT want' },
     ],
   },
 ]
+
+/**
+ * Brand Kit keys inside visual_brand: the company's real logo (uploaded to the
+ * marketing-assets bucket) and its brand colors as hex values. Stored in the
+ * same jsonb as the free-text fields, so they flow into generation context
+ * automatically.
+ */
+export const BRAND_KIT_KEYS = {
+  logo: 'logo_url',
+  colorPrimary: 'color_primary',
+  colorSecondary: 'color_secondary',
+  colorAccent: 'color_accent',
+} as const
 
 /** Campaign output sections, in display order (drives the tab UI). */
 export const CAMPAIGN_SECTIONS: { key: string; label: string }[] = [
@@ -333,6 +346,27 @@ export function useMktTable<T extends { id: string }>(
   }, [table, companyId])
 
   return { rows, refresh, insert, update, remove }
+}
+
+/** Per-company brand kit (logo + colors) for chrome like the company tabs. */
+export function useBrandKits() {
+  const [kits, setKits] = useState<Record<string, { logo: string; primary: string }>>({})
+  useEffect(() => {
+    if (!supabase) return
+    void supabase.from('mkt_brand_profiles').select('company_id, visual_brand')
+      .then(({ data, error }) => {
+        if (error || !data) return
+        const out: Record<string, { logo: string; primary: string }> = {}
+        for (const row of data as { company_id: string; visual_brand: Record<string, string> }[]) {
+          out[row.company_id] = {
+            logo: row.visual_brand?.[BRAND_KIT_KEYS.logo] || '',
+            primary: row.visual_brand?.[BRAND_KIT_KEYS.colorPrimary] || '',
+          }
+        }
+        setKits(out)
+      })
+  }, [])
+  return kits
 }
 
 /** Lenses are system-level (not per-company). */
