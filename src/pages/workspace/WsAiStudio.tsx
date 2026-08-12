@@ -47,6 +47,25 @@ type Viral = {
 const SCORE_BAR = 85       // auto-revise below this…
 const MAX_AUTO_PASSES = 2  // …but never more than this many drafts before showing
 
+/** Ad-creative controls. An art director writes the actual image prompt from
+ * the script (see the `image_brief` step) — these choose the treatment. */
+type ImgStyle = 'lifestyle' | 'ugc' | 'bold' | 'beforeafter' | 'closeup'
+type ImgAspect = 'portrait' | 'square' | 'story'
+type ImageBrief = { prompt: string; headline: string; subhead: string; rationale: string }
+
+const IMG_STYLES: { id: ImgStyle; label: string; hint: string }[] = [
+  { id: 'lifestyle', label: 'Lifestyle', hint: 'Real people, real moment — cinematic and warm' },
+  { id: 'ugc', label: 'UGC', hint: 'Looks phone-shot by a friend, not a brand' },
+  { id: 'bold', label: 'Bold poster', hint: 'Graphic, high-contrast, headline-forward' },
+  { id: 'beforeafter', label: 'Before/After', hint: 'The drab before against the dream after' },
+  { id: 'closeup', label: 'Close-up', hint: 'One arresting detail, razor-thin focus' },
+]
+const IMG_ASPECTS: { id: ImgAspect; label: string; dim: string; ratio: string }[] = [
+  { id: 'portrait', label: 'Flyer / Feed 2:3', dim: '1024 × 1536', ratio: '2 / 3' },
+  { id: 'square', label: 'Square 1:1', dim: '1024 × 1024', ratio: '1 / 1' },
+  { id: 'story', label: 'Story / Reel', dim: '1024 × 1536', ratio: '2 / 3' },
+]
+
 /** One bay in the media strip: label + dimensions, a placeholder that shows the
  * size while rendering, the media once it exists. Nothing generates on its own. */
 function MediaSlot({ label, dim, ratio, busy, note, url, kind, action, onGen, fileName, expect }: {
@@ -152,9 +171,14 @@ export default function WsAiStudio() {
   const [passes, setPasses] = useState(0)
   const [error, setError] = useState('')
 
-  // Media bay: static image · moving image (5s) · video (10s)
+  // Media bay: ad creative · moving image (5s) · video (10s)
   const [imgBusy, setImgBusy] = useState(false)
   const [imgUrl, setImgUrl] = useState('')
+  const [imgNote, setImgNote] = useState('')
+  const [imgStyle, setImgStyle] = useState<ImgStyle>('lifestyle')
+  const [imgAspect, setImgAspect] = useState<ImgAspect>('portrait')
+  const [imgText, setImgText] = useState(true)
+  const [brief, setBrief] = useState<ImageBrief | null>(null)
   const [motionBusy, setMotionBusy] = useState(false)
   const [motionUrl, setMotionUrl] = useState('')
   const [motionNote, setMotionNote] = useState('')
@@ -289,23 +313,45 @@ export default function WsAiStudio() {
     setStage('')
   }
 
-  /** Static image; returns the URL so the clip makers can chain off it. */
-  const makeImage = async (): Promise<string> => {
-    if (imgUrl) return imgUrl
-    setImgBusy(true)
+  /**
+   * Ad creative, in two steps. First an art director reads the actual script
+   * and writes a hyper-specific image prompt (subject, emotion, lens, light,
+   * composition, negative space) plus the headline to render — a one-line
+   * brief like "plans" can never produce an ad on its own. Then the image
+   * model executes that prompt. Returns the URL so the clip makers can chain.
+   */
+  const makeImage = async (regenerate = false): Promise<string> => {
+    if (imgUrl && !regenerate) return imgUrl
+    const source = (result || input).trim()
+    if (!source) { toast('Write the idea (or generate the script) first'); return '' }
+
+    setImgBusy(true); setImgNote('Art-directing the shot…')
     const kit = parseKit(settings[kitKey(brand)])
-    const r = await post('studio-image', {
-      prompt: [
-        `Marketing image for ${BRAND_LABEL[brand]}.`,
-        `Concept: ${input.trim().slice(0, 400)}`,
-        kit.colors?.length ? `Brand colours to feature: ${kit.colors.slice(0, 4).join(', ')}.` : '',
-        'Photorealistic, premium, social-media ready, vertical-crop friendly, no text overlays, no logos, no watermarks.',
-      ].filter(Boolean).join(' '),
+
+    const b = await post('studio-generate', {
+      mode: 'image_brief', output, brandLabel: BRAND_LABEL[brand],
+      input: input.trim(), draft: result, context: buildContext(),
+      imageStyle: imgStyle, aspect: imgAspect, withText: imgText,
     })
-    setImgBusy(false)
+    const ad = (b.brief as ImageBrief | undefined) || null
+    if (ad) setBrief(ad)
+
+    // Everything the image model needs, in the order it weighs it.
+    const prompt = [
+      ad?.prompt || `Scroll-stopping advertising photograph for ${BRAND_LABEL[brand]}. ${source.slice(0, 500)}`,
+      kit.colors?.length ? `Brand colour palette: ${kit.colors.slice(0, 4).join(', ')} — use these in the wardrobe, props, light or graphic elements.` : '',
+      imgText && ad?.headline
+        ? `Render this text INTO the image, large, bold, perfectly spelled, in the clear negative space: headline "${ad.headline}"${ad.subhead ? `, smaller supporting line "${ad.subhead}"` : ''}. Typography must be clean, modern, high-contrast and fully legible on a phone.`
+        : 'No text, no lettering, no watermarks anywhere in the image.',
+      'Advertising-grade quality: sharp focus on the subject, professional colour grading, natural skin tones, believable real-world detail. Not a stock photo, not AI-glossy, no extra fingers, no distorted faces, no gibberish text.',
+    ].filter(Boolean).join(' ')
+
+    setImgNote('Rendering the creative…')
+    const r = await post('studio-image', { prompt, aspect: imgAspect })
+    setImgBusy(false); setImgNote('')
     const url = String(r.dataUrl || r.url || '')
     if (url) { setImgUrl(url); return url }
-    toast(r.error === 'not_configured' ? String(r.message) : 'Image generation failed — try again')
+    toast(r.error === 'not_configured' ? String(r.message) : `Image failed: ${r.detail || r.error || 'try again'}`)
     return ''
   }
 
@@ -560,18 +606,60 @@ export default function WsAiStudio() {
                 <Button variant="outline" onClick={() => void anotherPass()} disabled={busy}>↻ Run another pass</Button>
               </div>
 
-              {/* Media bay — static image, moving image, video. Nothing runs on
+              {/* Media bay — ad creative, moving image, video. Nothing runs on
                   its own; while rendering, each slot shows its dimensions. */}
               <div className="mt-5 pt-4" style={{ borderTop: '1px solid var(--color-border)' }}>
                 <div className="flex items-baseline justify-between mb-2 gap-3 flex-wrap">
-                  <h3 className="text-[13px] font-bold" style={{ color: 'var(--color-text)' }}>Media</h3>
-                  <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>Optional — each render costs. The moving image & video animate the static image.</span>
+                  <h3 className="text-[13px] font-bold" style={{ color: 'var(--color-text)' }}>Ad creative</h3>
+                  <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>Optional — each render costs. Clips animate the creative.</span>
                 </div>
+
+                {/* Treatment controls — an art director turns these + the script
+                    into the actual image prompt. */}
+                <div className="rounded-xl p-3 mb-3" style={{ background: 'var(--color-bg)' }}>
+                  <div className="flex gap-1.5 flex-wrap mb-2">
+                    {IMG_STYLES.map((s) => (
+                      <button key={s.id} onClick={() => setImgStyle(s.id)} title={s.hint}
+                        className="px-2.5 py-1.5 rounded-full text-[12px] font-semibold transition"
+                        style={{
+                          background: imgStyle === s.id ? 'var(--color-accent)' : 'var(--color-surface)',
+                          color: imgStyle === s.id ? 'var(--color-on-accent)' : 'var(--color-muted)',
+                          border: '1px solid var(--color-border)',
+                        }}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-1.5 flex-wrap items-center">
+                    {IMG_ASPECTS.map((a) => (
+                      <button key={a.id} onClick={() => setImgAspect(a.id)}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition"
+                        style={{
+                          background: imgAspect === a.id ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)' : 'transparent',
+                          color: imgAspect === a.id ? 'var(--color-accent)' : 'var(--color-muted)',
+                          border: imgAspect === a.id ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
+                        }}>
+                        {a.label}
+                      </button>
+                    ))}
+                    <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold ml-1 cursor-pointer" style={{ color: 'var(--color-muted)' }}>
+                      <input type="checkbox" checked={imgText} onChange={(e) => setImgText(e.target.checked)} />
+                      Headline on image (flyer)
+                    </label>
+                  </div>
+                  <p className="text-[11px] mt-2" style={{ color: 'var(--color-muted)' }}>
+                    {IMG_STYLES.find((s) => s.id === imgStyle)?.hint}
+                  </p>
+                </div>
+
                 <div className="grid sm:grid-cols-3 gap-3">
-                  <MediaSlot label="Static image" dim="1024 × 1024" ratio="1 / 1"
-                    busy={imgBusy} note="" url={imgUrl} kind="image"
-                    action="Generate image" onGen={() => void makeImage()}
-                    fileName={`${brand.toLowerCase()}-ai-image.png`} expect="15–45s" />
+                  <MediaSlot
+                    label={imgText ? 'Ad creative / flyer' : 'Ad creative'}
+                    dim={IMG_ASPECTS.find((a) => a.id === imgAspect)!.dim}
+                    ratio={IMG_ASPECTS.find((a) => a.id === imgAspect)!.ratio}
+                    busy={imgBusy} note={imgNote} url={imgUrl} kind="image"
+                    action="Generate creative" onGen={() => void makeImage()}
+                    fileName={`${brand.toLowerCase()}-ad.png`} expect="30–60s" />
                   <MediaSlot label="Moving image · 5s" dim="768 × 1280" ratio="3 / 5"
                     busy={motionBusy} note={motionNote} url={motionUrl} kind="video"
                     action="Animate it" onGen={() => void makeClip(5)} expect="1–2 min" />
@@ -579,6 +667,15 @@ export default function WsAiStudio() {
                     busy={vidBusy} note={vidNote} url={vidUrl} kind="video"
                     action="Generate video" onGen={() => void makeClip(10)} expect="2–4 min" />
                 </div>
+
+                {imgUrl && (
+                  <div className="flex items-center gap-3 mt-2 flex-wrap">
+                    <Button variant="outline" onClick={() => void makeImage(true)} disabled={imgBusy}>↻ New variation</Button>
+                    {brief?.rationale && (
+                      <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>Why it stops the scroll: {brief.rationale}</span>
+                    )}
+                  </div>
+                )}
               </div>
             </Card>
           )}

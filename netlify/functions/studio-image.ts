@@ -1,7 +1,13 @@
 /**
- * AI Studio — optional image generation. One prompt in, one image back as a
- * data URL. Uses the same OPENAI_API_KEY; never called automatically — the
- * user explicitly clicks, because images cost real money per generation.
+ * AI Studio — ad creative generation.
+ *
+ * The caller sends a fully art-directed prompt (written by the `image_brief`
+ * step in studio-generate) plus the format. Never called automatically — the
+ * user clicks, because every render costs real money.
+ *
+ * Ad creatives default to HIGH quality: this is the asset that has to stop a
+ * thumb, so it earns the extra seconds. Set STUDIO_IMAGE_QUALITY to 'medium'
+ * or 'low' to trade quality for speed and cost.
  *
  * Env: OPENAI_API_KEY (required), STUDIO_IMAGE_MODEL (default gpt-image-1;
  * falls back to dall-e-3 automatically if the account lacks gpt-image-1).
@@ -10,18 +16,23 @@
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
-async function generate(apiKey: string, model: string, prompt: string) {
+// gpt-image-1 sizes; portrait/story both use the tall frame ads live in.
+const SIZES: Record<string, string> = {
+  square: '1024x1024',
+  portrait: '1024x1536',
+  story: '1024x1536',
+}
+
+async function generate(apiKey: string, model: string, prompt: string, size: string, quality: string) {
   return fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model,
       prompt: prompt.slice(0, 3800),
-      size: '1024x1024',
+      size,
       n: 1,
-      // gpt-image-1 renders 2-4x faster (and cheaper) below full quality —
-      // right for social drafts. dall-e-3 uses its own quality vocabulary.
-      ...(model === 'gpt-image-1' ? { quality: process.env.STUDIO_IMAGE_QUALITY || 'medium' } : {}),
+      ...(model === 'gpt-image-1' ? { quality } : {}),
     }),
   })
 }
@@ -31,16 +42,21 @@ export default async (req: Request): Promise<Response> => {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return json({ error: 'not_configured', message: 'Add OPENAI_API_KEY in Netlify to enable images.' }, 200)
 
-  let p: { prompt?: string }
+  let p: { prompt?: string; aspect?: string; quality?: string }
   try { p = await req.json() } catch { return json({ error: 'bad_request' }, 400) }
   const prompt = (p.prompt || '').trim()
   if (!prompt) return json({ error: 'no_prompt' }, 400)
 
+  const size = SIZES[p.aspect || 'square'] || SIZES.square
+  const quality = p.quality || process.env.STUDIO_IMAGE_QUALITY || 'high'
   const primary = process.env.STUDIO_IMAGE_MODEL || 'gpt-image-1'
+
   try {
-    let res = await generate(apiKey, primary, prompt)
+    let res = await generate(apiKey, primary, prompt, size, quality)
     // Accounts without gpt-image-1 access get a 4xx — retry once on dall-e-3.
-    if (!res.ok && primary === 'gpt-image-1') res = await generate(apiKey, 'dall-e-3', prompt)
+    if (!res.ok && primary === 'gpt-image-1') {
+      res = await generate(apiKey, 'dall-e-3', prompt, size === '1024x1536' ? '1024x1792' : '1024x1024', quality)
+    }
     if (!res.ok) {
       const detail = await res.text()
       return json({ error: 'provider_error', detail: detail.slice(0, 300) }, 200)
