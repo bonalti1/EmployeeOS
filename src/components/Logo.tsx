@@ -14,3 +14,19 @@ export function Logo({ height = 56, title = 'RJP' }: { height?: number; title?: 
     />
   )
 }
+
+/**
+ * BONALTI wordmark — the company mark used across the Assistant OS (Carlos's
+ * shell) and the shared sign-in. White on transparent, wide aspect (~5.3:1),
+ * so it's sized by height and capped to its container's width.
+ */
+export function BonaltiLogo({ height = 34, title = 'BONALTI' }: { height?: number; title?: string }) {
+  return (
+    <img
+      src="/logos/bonalti.png"
+      alt={title}
+      draggable={false}
+      style={{ height, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block', userSelect: 'none' }}
+    />
+  )
+}

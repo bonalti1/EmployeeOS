@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { supabase, cloudConfigured } from '../lib/supabase'
 import { startCloudSync } from '../lib/cloud'
-import { Logo } from './Logo'
+import { BonaltiLogo } from './Logo'
 
 /**
  * Wraps the whole app. With no Supabase configured it's a pass-through (the app
@@ -141,10 +141,10 @@ export default function AuthGate({ children }: { children: ReactNode }) {
 
       <div className="relative w-full max-w-[400px] fade-up">
         {/* Brand */}
-        <div className="flex flex-col items-center mb-7">
-          <Logo height={78} />
-          <div className="mt-3 text-[10px] font-semibold uppercase tracking-[0.32em]" style={{ color: C.muted }}>
-            Personal Operating System
+        <div className="flex flex-col items-center mb-7 px-4">
+          <BonaltiLogo height={42} />
+          <div className="mt-3.5 text-[10px] font-semibold uppercase tracking-[0.32em]" style={{ color: C.muted }}>
+            Operating System
           </div>
         </div>
 

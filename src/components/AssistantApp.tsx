@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { IconMenu, IconHome, IconTasks, IconFilm, IconJournal } from './icons'
-import { Logo } from './Logo'
+import { BonaltiLogo } from './Logo'
 import { WS_SECTIONS } from './WorkspaceLayout'
 import { useWorkspace, ASSISTANT_NAME } from '../lib/workspace'
 import { supabase } from '../lib/supabase'
@@ -66,9 +66,9 @@ function AssistantSidebar({ onNavigate }: { onNavigate?: () => void }) {
         <div className="text-[11px] mt-0.5 opacity-55 tracking-wide">{weekday}, {monthDay}</div>
       </div>
 
-      <div className="mt-4 mb-5 flex flex-col items-center">
-        <Logo height={64} />
-        <div className="mt-2 text-[10px] font-medium uppercase tracking-[0.22em] opacity-55 text-center">{ASSISTANT_NAME} Operating System</div>
+      <div className="mt-5 mb-5 flex flex-col items-center px-2">
+        <BonaltiLogo height={30} />
+        <div className="mt-2.5 text-[10px] font-medium uppercase tracking-[0.22em] opacity-55 text-center">{ASSISTANT_NAME} Operating System</div>
       </div>
 
       <div className="flex-1 flex flex-col min-h-0">
@@ -193,7 +193,8 @@ export default function AssistantApp() {
           <button onClick={() => setMobileOpen(true)} aria-label="Menu" style={{ color: 'var(--color-text)' }}>
             <IconMenu width={24} height={24} />
           </button>
-          <Logo height={24} />
+          {/* White wordmark → inverted to read on the light glass bar */}
+          <span style={{ filter: 'invert(0.85)' }}><BonaltiLogo height={14} /></span>
           <span className="ml-auto text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--color-muted)' }}>{ASSISTANT_NAME} OS</span>
         </div>
 
