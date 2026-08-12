@@ -13,6 +13,7 @@ import BrandKitPanel from './BrandKitPanel'
 import { BRAND_KEYS, BRAND_LABEL, kitKey, parseKit, kitSummary, toLogoDataUrl, type BrandKey } from '../../lib/brandKit'
 import { listPhotos, photoToDataUrl, type WsPhoto } from '../../lib/wsPhotos'
 import { composeAd } from '../../lib/composeAd'
+import { composeFlyer, logoWithAlpha, type FlyerTemplate, type LogoPos } from '../../lib/adLayout'
 import { MENTORS } from '../../lib/mentors'
 
 /**
@@ -221,6 +222,9 @@ export default function WsAiStudio() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [brandLogo, setBrandLogo] = useState(true)   // stamp the real logo on the finished ad
   const [rawImg, setRawImg] = useState('')           // pre-branding render, for restamping
+  const [keepReal, setKeepReal] = useState(true)     // photo stays pixel-real; design composed around it
+  const [template, setTemplate] = useState<FlyerTemplate>('banner')
+  const [logoPos, setLogoPos] = useState<LogoPos>('bottom-right')
   const [imgAspect, setImgAspect] = useState<ImgAspect>('portrait')
   const [imgText, setImgText] = useState(true)
   const [hd, setHd] = useState(false)   // medium renders ~2x faster and reads the same on a phone
@@ -373,10 +377,59 @@ export default function WsAiStudio() {
    * brief like "plans" can never produce an ad on its own. Then the image
    * model executes that prompt. Returns the URL so the clip makers can chain.
    */
+  /** Words for the creative — reuses the art director's brief, or asks once. */
+  const ensureWords = async (fresh = false): Promise<ImageBrief | null> => {
+    if (brief && !fresh) return brief
+    const b = await post('studio-generate', {
+      mode: 'image_brief', output, brandLabel: BRAND_LABEL[brand],
+      input: input.trim(), draft: result, context: buildContext(),
+      imageStyle: imgStyle, aspect: imgAspect, withText: true,
+      noPeople: true, fromPhoto: !!srcPhoto,
+    })
+    const ad = (b.brief as ImageBrief | undefined) || null
+    if (ad) setBrief(ad)
+    return ad
+  }
+
+  /** Compose the flyer around the untouched photo — instant, no image tokens. */
+  const composeReal = async (words: ImageBrief | null, withLogo = brandLogo, pos = logoPos, tpl = template): Promise<string> => {
+    const kit = parseKit(settings[kitKey(brand)])
+    return composeFlyer({
+      photoUrl: srcPhoto,
+      headline: words?.headline || input.trim().slice(0, 48) || BRAND_LABEL[brand],
+      subhead: words?.subhead || '',
+      template: tpl,
+      aspect: imgAspect,
+      primary: kit.colors?.[0],
+      accent: kit.colors?.[1] || kit.colors?.[0],
+      logoUrl: withLogo ? kit.logo : undefined,
+      logoPos: pos,
+      headingFont: kit.headingFont,
+    })
+  }
+
   const makeImage = async (regenerate = false): Promise<string> => {
     if (imgUrl && !regenerate) return imgUrl
     const source = (result || input).trim()
     if (!source) { toast('Write the idea (or generate the script) first'); return '' }
+
+    // Real-photo flyer: the house stays exactly as photographed; AI writes the
+    // words, the design is drawn locally with the exact brand colours.
+    if (srcPhoto && keepReal) {
+      setImgBusy(true); setImgNote('Writing the headline…')
+      const words = await ensureWords(regenerate)
+      setImgNote('Designing your flyer…')
+      try {
+        const flyer = await composeReal(words)
+        setRawImg(flyer); setImgUrl(flyer)
+        setImgBusy(false); setImgNote('')
+        return flyer
+      } catch {
+        setImgBusy(false); setImgNote('')
+        toast('Could not compose the flyer — try another photo')
+        return ''
+      }
+    }
 
     setImgBusy(true); setImgNote('Art-directing the shot…')
     const kit = parseKit(settings[kitKey(brand)])
@@ -419,25 +472,39 @@ export default function WsAiStudio() {
     // Brand finishing pass: stamp the REAL logo file and exact brand colour on
     // the render — an image model can only ever approximate a wordmark.
     setRawImg(url)
-    const final = await brandStamp(url, kit)
+    const final = await brandStamp(url)
     setImgBusy(false); setImgNote('')
     setImgUrl(final)
     return final
   }
 
-  /** Composite the actual logo + brand accent onto a finished render. */
-  const brandStamp = async (url: string, kit = parseKit(settings[kitKey(brand)])): Promise<string> => {
-    if (!brandLogo || !kit.logo) return url
+  /** Composite the actual logo + brand accent onto a finished render. The
+   * logo is keyed first so a white-card PNG never stamps as a white box. */
+  const brandStamp = async (url: string, enabled = brandLogo, pos = logoPos): Promise<string> => {
+    const kit = parseKit(settings[kitKey(brand)])
+    if (!enabled || !kit.logo) return url
     try {
       setImgNote('Applying your logo…')
+      const clean = (await logoWithAlpha(kit.logo)).toDataURL('image/png')
       return await composeAd({
         imageUrl: url,
-        logoUrl: kit.logo,
-        placement: 'bottom-left',
-        logoScale: 0.3,
+        logoUrl: clean,
+        placement: pos,
+        logoScale: 0.28,
         accentColor: kit.colors?.[0],
       })
     } catch { return url }
+  }
+
+  /** Re-apply branding to the existing creative without a fresh render. */
+  const rebrand = async (opts?: { logo?: boolean; pos?: LogoPos; tpl?: FlyerTemplate }) => {
+    const on = opts?.logo ?? brandLogo
+    const pos = opts?.pos ?? logoPos
+    const tpl = opts?.tpl ?? template
+    if (!imgUrl) return
+    if (srcPhoto && keepReal) setImgUrl(await composeReal(brief, on, pos, tpl))
+    else if (rawImg) setImgUrl(on ? await brandStamp(rawImg, true, pos) : rawImg)
+    setImgNote('')
   }
 
   /** Moving image (5s) or video (10s) — both animate the static image. */
@@ -732,19 +799,22 @@ export default function WsAiStudio() {
                       Headline on image (flyer)
                     </label>
                     <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer" style={{ color: 'var(--color-muted)' }}
-                      title="Stamps your real logo file and brand colour onto the finished ad">
+                      title="Stamps your real logo file (white background removed) onto the finished ad">
                       <input type="checkbox" checked={brandLogo}
-                        onChange={async (e) => {
-                          setBrandLogo(e.target.checked)
-                          if (rawImg) {
-                            const kit = parseKit(settings[kitKey(brand)])
-                            setImgUrl(e.target.checked && kit.logo
-                              ? await composeAd({ imageUrl: rawImg, logoUrl: kit.logo, placement: 'bottom-left', logoScale: 0.3, accentColor: kit.colors?.[0] })
-                              : rawImg)
-                          }
-                        }} />
+                        onChange={(e) => { setBrandLogo(e.target.checked); void rebrand({ logo: e.target.checked }) }} />
                       Logo on ad
                     </label>
+                    {brandLogo && (
+                      <select value={logoPos}
+                        onChange={(e) => { const pos = e.target.value as LogoPos; setLogoPos(pos); void rebrand({ pos }) }}
+                        className="rounded-lg px-1.5 py-1 text-[11px] outline-none" style={wsField}>
+                        <option value="bottom-right">Logo: bottom right</option>
+                        <option value="bottom-left">Logo: bottom left</option>
+                        <option value="bottom-center">Logo: bottom center</option>
+                        <option value="top-left">Logo: top left</option>
+                        <option value="top-right">Logo: top right</option>
+                      </select>
+                    )}
                     <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer" style={{ color: 'var(--color-muted)' }}
                       title="HD renders sharper but takes about twice as long">
                       <input type="checkbox" checked={hd} onChange={(e) => setHd(e.target.checked)} />
@@ -784,6 +854,41 @@ export default function WsAiStudio() {
                         <button onClick={() => setSrcPhoto('')} className="text-[11px] font-semibold" style={{ color: 'var(--color-muted)' }}>Remove</button>
                       )}
                     </div>
+
+                    {/* With a real photo, choose: keep it untouched (flyer is
+                        composed around it — instant, free) or let AI restyle. */}
+                    {srcPhoto && (
+                      <div className="w-full flex gap-1.5 flex-wrap items-center mt-1">
+                        {([['real', '📷 Photo stays real'], ['ai', '✨ AI restyle']] as const).map(([m, label]) => (
+                          <button key={m} onClick={() => { setKeepReal(m === 'real') }}
+                            className="px-2.5 py-1.5 rounded-full text-[11px] font-bold transition"
+                            style={{
+                              background: (m === 'real') === keepReal ? 'var(--color-accent)' : 'var(--color-surface)',
+                              color: (m === 'real') === keepReal ? 'var(--color-on-accent)' : 'var(--color-muted)',
+                              border: '1px solid var(--color-border)',
+                            }}>
+                            {label}
+                          </button>
+                        ))}
+                        {keepReal && (
+                          <>
+                            <span className="h-4 w-px" style={{ background: 'var(--color-border)' }} />
+                            {([['banner', 'Banner'], ['overlay', 'Overlay'], ['frame', 'Frame']] as const).map(([t, label]) => (
+                              <button key={t} onClick={() => { setTemplate(t); void rebrand({ tpl: t }) }}
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition"
+                                style={{
+                                  background: template === t ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)' : 'transparent',
+                                  color: template === t ? 'var(--color-accent)' : 'var(--color-muted)',
+                                  border: template === t ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
+                                }}>
+                                {label}
+                              </button>
+                            ))}
+                            <span className="text-[10px]" style={{ color: 'var(--color-muted)' }}>instant · no AI image cost</span>
+                          </>
+                        )}
+                      </div>
+                    )}
 
                     {/* Pick from the brand's permanent library */}
                     {pickerOpen && (
