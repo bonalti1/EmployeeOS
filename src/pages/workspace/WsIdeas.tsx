@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, Button, Input, EmptyState } from '../../components/ui'
 import { IconTrash, IconMic, IconSpark, IconCheck } from '../../components/icons'
 import { WsShell, BrandLogo, BRAND_OPTIONS, wsField } from '../../components/WorkspaceLayout'
@@ -10,7 +11,6 @@ import {
   useWorkspace, useWsTable, ASSISTANT_NAME, IDEA_CATEGORIES,
   type WsIdea, type WsContent, type WsTask,
 } from '../../lib/workspace'
-import { supabase } from '../../lib/supabase'
 
 /**
  * Idea Board — the shared scratchpad.
@@ -64,6 +64,7 @@ function VoiceNote({ id }: { id: string }) {
 export default function WsIdeas() {
   const { role } = useWorkspace()
   const { toast } = useToast()
+  const navigate = useNavigate()
   const confirmDelete = useConfirmDelete()
   const { rows, update, remove } = useWsTable<WsIdea>('ws_ideas')
   const content = useWsTable<WsContent>('ws_content')
@@ -114,22 +115,16 @@ export default function WsIdeas() {
     toast('Sent to Content → Ideas')
   }
 
-  /** Promote into Marketing Studio as a company-scoped marketing idea. */
-  const toCampaign = async (idea: WsIdea) => {
-    if (!supabase) return
-    const slug = idea.brand === 'ALTO' ? 'alto' : 'stb'
-    const { data: companies } = await supabase.from('mkt_companies').select('id').eq('slug', slug).limit(1)
-    const companyId = companies?.[0]?.id
-    if (!companyId) { toast('Run the Marketing Studio SQL first (supabase/05_marketing_studio.sql)'); return }
-    await supabase.from('mkt_ideas').insert({
-      company_id: companyId,
-      title: idea.text.slice(0, 80),
-      raw_idea: idea.text,
-      notes: idea.note,
-      author_role: idea.author_role,
-    })
-    await update(idea.id, { status: 'shipped', promoted_to: 'campaign' } as Partial<WsIdea>)
-    toast(`Sent to Marketing Studio → ${slug === 'alto' ? 'ALTO Pro' : 'South Texas Builders'}`)
+  /** Hand the idea to AI Studio: it arrives pre-filled with its company set,
+   * ready to become an ad script / video script / story. The idea itself
+   * stays here (ideas live on the board until they ship). */
+  const toAiStudio = (idea: WsIdea) => {
+    const seed = {
+      text: [idea.text, idea.note].filter(Boolean).join('\n'),
+      brand: idea.brand === 'STB' ? 'STB' : idea.brand === 'ALTO' ? 'ALTO' : idea.brand === 'Internal' ? 'BONALTI' : undefined,
+    }
+    try { sessionStorage.setItem('ai_seed', JSON.stringify(seed)) } catch { /* ignore */ }
+    navigate('/workspace/ai')
   }
 
   const toTask = async (idea: WsIdea) => {
@@ -287,7 +282,7 @@ export default function WsIdeas() {
 
                     <div className="flex items-center gap-1.5">
                       <Button variant="outline" className="text-xs px-2.5 py-1.5" onClick={() => void toContent(idea)}>→ Content</Button>
-                      <Button variant="outline" className="text-xs px-2.5 py-1.5" onClick={() => void toCampaign(idea)}>→ Campaign</Button>
+                      <Button variant="outline" className="text-xs px-2.5 py-1.5" onClick={() => toAiStudio(idea)}>✨ → AI Studio</Button>
                       <Button variant="outline" className="text-xs px-2.5 py-1.5" onClick={() => void toTask(idea)}>→ Task</Button>
                       <button
                         onClick={() => confirmDelete({
