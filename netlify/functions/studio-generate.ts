@@ -79,6 +79,7 @@ export default async (req: Request): Promise<Response> => {
     context?: Ctx
     mentorRoster?: { name: string; why: string }[]
     imageStyle?: string; aspect?: string; withText?: boolean
+    noPeople?: boolean; fromPhoto?: boolean
   }
   try { p = await req.json() } catch { return json({ error: 'bad_request' }, 400) }
 
@@ -152,27 +153,37 @@ export default async (req: Request): Promise<Response> => {
       const system = [
         'You are a world-class advertising art director and prompt engineer for image models.',
         'You turn a marketing script into ONE specific, cinematic, scroll-stopping ad creative.',
-        'You know what actually stops a thumb: a human face with real emotion, an unexpected juxtaposition, dramatic light, an extreme close-up, or a striking before/after — never a flat product-on-a-table stock photo.',
-        'You always specify the subject and what they are DOING, framing and camera (lens, angle, depth of field), lighting, mood, colour treatment, background, and deliberate negative space for text.',
-        'You ban stock cliches: no blueprints laid on desks, no hard hats posed on tables, no generic handshakes, no floating objects, no empty rooms as the hero shot.',
+        'THE HERO IS ALWAYS THE WORK ITSELF — the actual home, the craftsmanship, the transformation — shot like architectural photography for a magazine cover: dramatic light, bold angles, striking composition.',
+        'CRITICAL: never invent people. AI-generated faces read as fake to a local audience and destroy trust. Compose so the work carries the whole frame.',
+        'What stops a thumb without people: a low dramatic hero angle, golden-hour rim light, a striking architectural detail in extreme close-up, an unexpected scale or juxtaposition, a bold graphic colour field, or a genuine before/after.',
+        'You always specify framing and camera (lens, angle, height, depth of field), the light and time of day, materials and textures, colour treatment, background, and deliberate negative space for the headline.',
+        'You ban stock cliches: no blueprints laid on desks, no hard hats posed on tables, no handshakes, no floating objects, no flat catalogue shots.',
         'Return STRICT JSON only.',
       ].join(' ')
 
-      const style = p.imageStyle || 'lifestyle'
+      const style = p.imageStyle || 'hero'
       const styleGuide: Record<string, string> = {
-        lifestyle: 'Cinematic lifestyle photograph. Real people in a real moment, candid not posed. 85mm lens, f/1.8, shallow depth of field, golden-hour or dramatic directional light, rich contrast, editorial magazine grade.',
-        ugc: 'Authentic phone-shot UGC. Shot on iPhone, slightly imperfect handheld framing, natural available light, real texture, no studio polish — feels like a friend filmed it, not a brand.',
-        bold: 'Bold graphic ad poster. Strong single subject against a flat brand-colour field, heavy contrast, dramatic rim light, deliberate empty space for a headline, modern art-directed poster energy.',
-        beforeafter: 'Split-frame before/after. Left half: the drab, frustrating before. Right half: the aspirational after. Identical camera position and framing on both halves, clean centre divide, dramatic difference in light and life.',
-        closeup: 'Extreme macro close-up of the single most emotionally loaded detail. Visible texture, razor-thin focus, dramatic light raking across the surface, arresting and mysterious.',
+        hero: 'Architectural hero shot of the finished work. Low three-quarter angle to make it feel monumental, 24mm wide lens with corrected verticals, golden-hour or blue-hour light with the interior glowing warm, deep sky, crisp materials, editorial architectural-magazine grade.',
+        ugc: 'Authentic phone-shot walkthrough of the real project. Shot on iPhone, slightly imperfect handheld framing, natural available light, honest texture, no studio polish — looks like the builder filmed it on site, not an agency.',
+        bold: 'Bold graphic ad poster. The work as a strong single subject against a flat brand-colour field, heavy contrast, dramatic rim light, generous empty space for a big headline, modern art-directed poster energy.',
+        beforeafter: 'Split-frame before/after of the same property. Left half: the tired, dated before in flat grey light. Right half: the finished build in warm dramatic light. Identical camera position and framing on both halves, clean centre divide.',
+        closeup: 'Extreme close-up of the single most impressive craftsmanship detail — a joint, an edge, a material meeting another. Visible texture and grain, razor-thin focus, dramatic light raking across the surface.',
       }
+      const noPeople = p.noPeople !== false
+      const sourceNote = p.fromPhoto
+        ? 'IMPORTANT: this prompt will be applied to a REAL photograph the client supplies of their own finished project. Do not describe a different building or invent a new scene — describe how to TRANSFORM this photo into the ad: the crop and framing to emphasise, the colour grade and light enhancement, the graphic treatment, and where the headline sits. Preserve the real architecture exactly as it is.'
+        : ''
 
       const wantsText = p.withText !== false
       const user = [
         `BRAND: ${brandLabel}`,
         ctx,
         `THE SCRIPT / IDEA THIS IMAGE MUST SELL:\n${(p.draft || input || '').slice(0, 4000)}`,
-        `CREATIVE STYLE TO USE: ${styleGuide[style] || styleGuide.lifestyle}`,
+        `CREATIVE STYLE TO USE: ${styleGuide[style] || styleGuide.hero}`,
+        sourceNote,
+        noPeople
+          ? 'ABSOLUTELY NO PEOPLE: no faces, no figures, no silhouettes, no hands. The work itself must carry the entire frame. Invented people look fake to a local audience and kill the ad.'
+          : 'People may appear only if the brand context establishes who they realistically are; never invent a demographic that does not match the local market.',
         `FORMAT: ${p.aspect === 'portrait' ? 'vertical 2:3 poster/flyer' : p.aspect === 'story' ? 'vertical 9:16 full-screen story' : 'square 1:1 feed post'}`,
         wantsText
           ? 'This image WILL carry text, so compose with clear negative space (top third or bottom third) and supply the exact words to render.'

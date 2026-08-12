@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, Button } from '../../components/ui'
 import { IconSpark } from '../../components/icons'
@@ -10,7 +10,7 @@ import {
 } from '../../lib/workspace'
 import { supabase } from '../../lib/supabase'
 import BrandKitPanel from './BrandKitPanel'
-import { BRAND_KEYS, BRAND_LABEL, kitKey, parseKit, kitSummary, type BrandKey } from '../../lib/brandKit'
+import { BRAND_KEYS, BRAND_LABEL, kitKey, parseKit, kitSummary, toLogoDataUrl, type BrandKey } from '../../lib/brandKit'
 import { MENTORS } from '../../lib/mentors'
 
 /**
@@ -49,16 +49,16 @@ const MAX_AUTO_PASSES = 2  // …but never more than this many drafts before sho
 
 /** Ad-creative controls. An art director writes the actual image prompt from
  * the script (see the `image_brief` step) — these choose the treatment. */
-type ImgStyle = 'lifestyle' | 'ugc' | 'bold' | 'beforeafter' | 'closeup'
+type ImgStyle = 'hero' | 'ugc' | 'bold' | 'beforeafter' | 'closeup'
 type ImgAspect = 'portrait' | 'square' | 'story'
 type ImageBrief = { prompt: string; headline: string; subhead: string; rationale: string }
 
 const IMG_STYLES: { id: ImgStyle; label: string; hint: string }[] = [
-  { id: 'lifestyle', label: 'Lifestyle', hint: 'Real people, real moment — cinematic and warm' },
-  { id: 'ugc', label: 'UGC', hint: 'Looks phone-shot by a friend, not a brand' },
-  { id: 'bold', label: 'Bold poster', hint: 'Graphic, high-contrast, headline-forward' },
-  { id: 'beforeafter', label: 'Before/After', hint: 'The drab before against the dream after' },
-  { id: 'closeup', label: 'Close-up', hint: 'One arresting detail, razor-thin focus' },
+  { id: 'hero', label: 'Hero shot', hint: 'The finished build, low angle, golden hour — magazine grade' },
+  { id: 'bold', label: 'Bold poster', hint: 'The work on a brand-colour field, headline-forward' },
+  { id: 'beforeafter', label: 'Before/After', hint: 'The tired before against the finished build' },
+  { id: 'closeup', label: 'Craft detail', hint: 'One close-up that proves the craftsmanship' },
+  { id: 'ugc', label: 'On-site', hint: 'Looks phone-shot on the jobsite, not agency-made' },
 ]
 const IMG_ASPECTS: { id: ImgAspect; label: string; dim: string; ratio: string }[] = [
   { id: 'portrait', label: 'Flyer / Feed 2:3', dim: '1024 × 1536', ratio: '2 / 3' },
@@ -212,7 +212,9 @@ export default function WsAiStudio() {
   const [imgBusy, setImgBusy] = useState(false)
   const [imgUrl, setImgUrl] = useState('')
   const [imgNote, setImgNote] = useState('')
-  const [imgStyle, setImgStyle] = useState<ImgStyle>('lifestyle')
+  const [imgStyle, setImgStyle] = useState<ImgStyle>('hero')
+  const [srcPhoto, setSrcPhoto] = useState('')   // a real project photo to build the ad from
+  const srcRef = useRef<HTMLInputElement>(null)
   const [imgAspect, setImgAspect] = useState<ImgAspect>('portrait')
   const [imgText, setImgText] = useState(true)
   const [hd, setHd] = useState(false)   // medium renders ~2x faster and reads the same on a phone
@@ -370,6 +372,7 @@ export default function WsAiStudio() {
       mode: 'image_brief', output, brandLabel: BRAND_LABEL[brand],
       input: input.trim(), draft: result, context: buildContext(),
       imageStyle: imgStyle, aspect: imgAspect, withText: imgText,
+      noPeople: true, fromPhoto: !!srcPhoto,
     })
     const ad = (b.brief as ImageBrief | undefined) || null
     if (ad) setBrief(ad)
@@ -381,11 +384,18 @@ export default function WsAiStudio() {
       imgText && ad?.headline
         ? `Render this text INTO the image, large, bold, perfectly spelled, in the clear negative space: headline "${ad.headline}"${ad.subhead ? `, smaller supporting line "${ad.subhead}"` : ''}. Typography must be clean, modern, high-contrast and fully legible on a phone.`
         : 'No text, no lettering, no watermarks anywhere in the image.',
-      'Advertising-grade quality: sharp focus on the subject, professional colour grading, natural skin tones, believable real-world detail. Not a stock photo, not AI-glossy, no extra fingers, no distorted faces, no gibberish text.',
+      'NO PEOPLE: no faces, no figures, no silhouettes, no hands anywhere in the frame — the work itself is the hero.',
+      srcPhoto
+        ? 'Keep the supplied photograph’s real architecture, materials and proportions exactly as they are — enhance the light, grade and framing, do not redesign the building.'
+        : '',
+      'Advertising-grade quality: sharp focus, professional colour grading, believable real-world detail and materials. Not a stock photo, not AI-glossy, no gibberish text.',
     ].filter(Boolean).join(' ')
 
-    setImgNote('Rendering the creative…')
-    const r = await post('studio-image', { prompt, aspect: imgAspect, quality: hd ? 'high' : 'medium' })
+    setImgNote(srcPhoto ? 'Building the ad from your photo…' : 'Rendering the creative…')
+    const r = await post('studio-image', {
+      prompt, aspect: imgAspect, quality: hd ? 'high' : 'medium',
+      ...(srcPhoto ? { sourcePhoto: srcPhoto } : {}),
+    })
     setImgBusy(false); setImgNote('')
     const url = String(r.dataUrl || r.url || '')
     if (url) { setImgUrl(url); return url }
@@ -693,6 +703,39 @@ export default function WsAiStudio() {
                   <p className="text-[11px] mt-2" style={{ color: 'var(--color-muted)' }}>
                     {IMG_STYLES.find((s) => s.id === imgStyle)?.hint}
                   </p>
+
+                  {/* Build the ad from a real project photo — always beats an
+                      invented scene, and never looks fake to a local audience. */}
+                  <div className="flex items-center gap-3 mt-3 pt-3 flex-wrap" style={{ borderTop: '1px solid var(--color-border)' }}>
+                    {srcPhoto ? (
+                      <img src={srcPhoto} alt="Source" className="rounded-lg shrink-0" style={{ height: 46, width: 62, objectFit: 'cover', border: '1px solid var(--color-border)' }} />
+                    ) : (
+                      <span className="grid place-items-center rounded-lg shrink-0" style={{ height: 46, width: 62, background: 'var(--color-surface)', border: '1px dashed var(--color-border)', color: 'var(--color-muted)', fontSize: 18 }}>📷</span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-bold" style={{ color: 'var(--color-text)' }}>
+                        {srcPhoto ? 'Building from your real photo' : 'Use a real project photo'}
+                      </p>
+                      <p className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
+                        A home you actually built beats anything AI invents — and never looks fake.
+                      </p>
+                    </div>
+                    <div className="flex gap-3 ml-auto">
+                      <button onClick={() => srcRef.current?.click()} className="text-[11px] font-bold" style={{ color: 'var(--color-accent)' }}>
+                        {srcPhoto ? 'Change photo' : 'Upload photo'}
+                      </button>
+                      {srcPhoto && (
+                        <button onClick={() => setSrcPhoto('')} className="text-[11px] font-semibold" style={{ color: 'var(--color-muted)' }}>Remove</button>
+                      )}
+                    </div>
+                    <input ref={srcRef} type="file" accept="image/*" className="hidden"
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0]
+                        e.currentTarget.value = ''
+                        if (!f) return
+                        try { setSrcPhoto(await toLogoDataUrl(f, 1024)) } catch { toast('Could not read that photo') }
+                      }} />
+                  </div>
                 </div>
 
                 {/* Hero creative on the left, the two clips stacked beside it */}
