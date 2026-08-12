@@ -22,7 +22,7 @@ export default async (req: Request): Promise<Response> => {
   const apiKey = process.env.RUNWAY_API_KEY
   if (!apiKey) return json({ error: 'not_configured', message: 'Add RUNWAY_API_KEY in Netlify to enable video.' }, 200)
 
-  let p: { action?: string; imageDataUrl?: string; promptText?: string; id?: string }
+  let p: { action?: string; imageDataUrl?: string; promptText?: string; id?: string; duration?: number }
   try { p = await req.json() } catch { return json({ error: 'bad_request' }, 400) }
 
   const headers = {
@@ -41,7 +41,8 @@ export default async (req: Request): Promise<Response> => {
           model: process.env.RUNWAY_MODEL || 'gen3a_turbo',
           promptImage: p.imageDataUrl,
           promptText: (p.promptText || '').slice(0, 500),
-          duration: 5,
+          // Runway accepts 5s (the "moving image") or 10s (the fuller video).
+          duration: p.duration === 10 ? 10 : 5,
           ratio: '768:1280',
         }),
       })

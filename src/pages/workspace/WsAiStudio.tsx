@@ -39,8 +39,53 @@ const OUTPUTS = [
 type OutputId = (typeof OUTPUTS)[number]['id']
 
 type Score = { hook: number; clarity: number; brandFit: number; cta: number; platformFit: number; total: number; feedback: string[] }
+type Viral = {
+  score: number; verdict: string; why: string[]
+  angles: { title: string; hook: string; format: string; whyViral: string }[]
+  boosters: string[]
+}
 const SCORE_BAR = 85       // auto-revise below this…
 const MAX_AUTO_PASSES = 2  // …but never more than this many drafts before showing
+
+/** One bay in the media strip: label + dimensions, a placeholder that shows the
+ * size while rendering, the media once it exists. Nothing generates on its own. */
+function MediaSlot({ label, dim, ratio, busy, note, url, kind, action, onGen, fileName }: {
+  label: string; dim: string; ratio: string; busy: boolean; note: string
+  url: string; kind: 'image' | 'video'; action: string; onGen: () => void; fileName?: string
+}) {
+  return (
+    <div className="rounded-xl p-3 flex flex-col gap-2" style={{ border: '1px dashed var(--color-border)', background: 'var(--color-bg)' }}>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-bold" style={{ color: 'var(--color-text)' }}>{label}</span>
+        <span className="text-[10px] tnum shrink-0" style={{ color: 'var(--color-muted)' }}>{dim}</span>
+      </div>
+      {url ? (
+        <>
+          {kind === 'image'
+            ? <img src={url} alt={label} className="w-full rounded-lg" style={{ aspectRatio: ratio, objectFit: 'cover' }} />
+            : <video src={url} controls playsInline className="w-full rounded-lg" style={{ aspectRatio: ratio, objectFit: 'cover', background: '#000' }} />}
+          {kind === 'image'
+            ? <a href={url} download={fileName || 'ai-image.png'} className="text-[11px] font-semibold" style={{ color: 'var(--color-accent)' }}>Download</a>
+            : <a href={url} target="_blank" rel="noopener" className="text-[11px] font-semibold" style={{ color: 'var(--color-accent)' }}>Open ↗</a>}
+        </>
+      ) : (
+        <div className="grid place-items-center rounded-lg" style={{ aspectRatio: ratio, background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+          {busy ? (
+            <div className="text-center px-3">
+              <span className="inline-block rounded-full animate-spin mb-2" style={{ width: 20, height: 20, border: '2.5px solid var(--color-border)', borderTopColor: 'var(--color-accent)' }} />
+              <p className="text-[11px] font-semibold" style={{ color: 'var(--color-text)' }}>{note || 'Generating…'}</p>
+              <p className="text-[10px] tnum mt-0.5" style={{ color: 'var(--color-muted)' }}>{dim}</p>
+            </div>
+          ) : (
+            <button onClick={onGen} className="text-xs font-semibold px-3 py-2 rounded-lg" style={{ color: 'var(--color-accent)', border: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
+              {action}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /** Brand DNA voice from Marketing Studio tables when present (legacy fallback). */
 function useBrandDnaVoice() {
@@ -98,11 +143,19 @@ export default function WsAiStudio() {
   const [passes, setPasses] = useState(0)
   const [error, setError] = useState('')
 
+  // Media bay: static image · moving image (5s) · video (10s)
   const [imgBusy, setImgBusy] = useState(false)
   const [imgUrl, setImgUrl] = useState('')
+  const [motionBusy, setMotionBusy] = useState(false)
+  const [motionUrl, setMotionUrl] = useState('')
+  const [motionNote, setMotionNote] = useState('')
   const [vidBusy, setVidBusy] = useState(false)
   const [vidUrl, setVidUrl] = useState('')
   const [vidNote, setVidNote] = useState('')
+
+  // Viral analysis of the idea itself
+  const [viral, setViral] = useState<Viral | null>(null)
+  const [viralBusy, setViralBusy] = useState(false)
 
   const [editingCtx, setEditingCtx] = useState(false)
   const [ctxDraft, setCtxDraft] = useState({ company: '', stb: '', alto: '' })
@@ -158,7 +211,8 @@ export default function WsAiStudio() {
   const generate = async () => {
     const brief = input.trim()
     if (!brief) { setError('Put the idea in first — or send one over from the Idea Board.'); return }
-    setError(''); setResult(''); setScore(null); setLens(''); setPasses(0); setImgUrl(''); setVidUrl(''); setVidNote('')
+    setError(''); setResult(''); setScore(null); setLens(''); setPasses(0)
+    setImgUrl(''); setMotionUrl(''); setMotionNote(''); setVidUrl(''); setVidNote('')
 
     try {
       // 1) Draft
@@ -226,52 +280,74 @@ export default function WsAiStudio() {
     setStage('')
   }
 
-  const makeImage = async () => {
-    if (!result) return
-    setImgBusy(true); setImgUrl('')
+  /** Static image; returns the URL so the clip makers can chain off it. */
+  const makeImage = async (): Promise<string> => {
+    if (imgUrl) return imgUrl
+    setImgBusy(true)
     const kit = parseKit(settings[kitKey(brand)])
     const r = await post('studio-image', {
       prompt: [
         `Marketing image for ${BRAND_LABEL[brand]}.`,
         `Concept: ${input.trim().slice(0, 400)}`,
         kit.colors?.length ? `Brand colours to feature: ${kit.colors.slice(0, 4).join(', ')}.` : '',
-        'Photorealistic, premium, social-media ready, no text overlays, no logos, no watermarks.',
+        'Photorealistic, premium, social-media ready, vertical-crop friendly, no text overlays, no logos, no watermarks.',
       ].filter(Boolean).join(' '),
     })
     setImgBusy(false)
-    if (r.dataUrl || r.url) setImgUrl(String(r.dataUrl || r.url))
-    else toast(r.error === 'not_configured' ? String(r.message) : 'Image generation failed — try again')
+    const url = String(r.dataUrl || r.url || '')
+    if (url) { setImgUrl(url); return url }
+    toast(r.error === 'not_configured' ? String(r.message) : 'Image generation failed — try again')
+    return ''
   }
 
-  const makeVideo = async () => {
-    if (!result) return
-    setVidBusy(true); setVidUrl(''); setVidNote('')
+  /** Moving image (5s) or video (10s) — both animate the static image. */
+  const makeClip = async (duration: 5 | 10) => {
+    const setBusy = duration === 5 ? setMotionBusy : setVidBusy
+    const setNote = duration === 5 ? setMotionNote : setVidNote
+    const setUrl = duration === 5 ? setMotionUrl : setVidUrl
+    setBusy(true); setUrl(''); setNote('')
     try {
       let img = imgUrl
-      if (!img) { setVidNote('Creating the base image first…'); await makeImage(); img = imgUrl }
-      if (!img) {
-        // makeImage sets state async of this closure — re-read via a fresh call
-        setVidBusy(false); setVidNote('')
-        toast('Generate the image first, then Video animates it.')
-        return
-      }
-      setVidNote('Sending to Runway…')
-      const created = await post('studio-video', { action: 'create', imageDataUrl: img, promptText: input.trim().slice(0, 400) })
+      if (!img) { setNote('Creating the base image…'); img = await makeImage() }
+      if (!img) { setBusy(false); setNote(''); return }
+      setNote('Sending to Runway…')
+      const created = await post('studio-video', {
+        action: 'create', imageDataUrl: img, promptText: input.trim().slice(0, 400), duration,
+      })
       if (created.error) {
-        setVidBusy(false); setVidNote('')
+        setBusy(false); setNote('')
         toast(created.error === 'not_configured' ? String(created.message) : `Video failed: ${created.detail || created.error}`)
         return
       }
       const id = String(created.id)
-      setVidNote('Rendering… this takes a minute or two.')
-      for (let i = 0; i < 60; i++) {
+      setNote(`Rendering ${duration}s…`)
+      for (let i = 0; i < 72; i++) {
         await new Promise((r) => setTimeout(r, 5000))
         const st = await post('studio-video', { action: 'status', id })
-        if (st.status === 'SUCCEEDED' && st.url) { setVidUrl(String(st.url)); break }
+        if (st.status === 'SUCCEEDED' && st.url) { setUrl(String(st.url)); break }
         if (st.status === 'FAILED') { toast(`Video failed: ${st.failure || 'unknown'}`); break }
       }
     } catch { toast('Video generation hit a network problem.') }
-    setVidBusy(false); setVidNote('')
+    setBusy(false); setNote('')
+  }
+
+  /** How viral can this idea get — scored against real viral-clip mechanics. */
+  const viralCheck = async () => {
+    const brief = input.trim()
+    if (!brief) { setError('Put the idea in first — then I can tell you how it travels.'); return }
+    setViralBusy(true); setError('')
+    const r = await post('studio-generate', {
+      mode: 'viral', output: 'ad_script', brandLabel: BRAND_LABEL[brand], input: brief, context: buildContext(),
+    })
+    setViralBusy(false)
+    if (r.viral) setViral(r.viral as Viral)
+    else toast(r.error === 'not_configured' ? String(r.message) : 'Viral analysis failed — try again')
+  }
+
+  /** Fold a chosen viral angle into the brief so Generate builds on it. */
+  const useAngle = (a: Viral['angles'][number]) => {
+    setInput((prev) => `${prev.trim()}\n\nVIRAL ANGLE — ${a.title} (${a.format})\nOpen with: ${a.hook}\nMechanic: ${a.whyViral}`)
+    toast(`Angle "${a.title}" added to the brief`)
   }
 
   const saveToContent = async () => {
@@ -388,6 +464,9 @@ export default function WsAiStudio() {
               <Button onClick={() => void generate()} disabled={busy}>
                 <IconSpark width={15} height={15} /> {busy ? stage : 'Generate (scored before you see it)'}
               </Button>
+              <Button variant="outline" onClick={() => void viralCheck()} disabled={viralBusy || busy}>
+                🔥 {viralBusy ? 'Analyzing…' : 'Viral check'}
+              </Button>
               {!busy && (
                 <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
                   Auto-revises until {SCORE_BAR}/100 (max {MAX_AUTO_PASSES} passes).
@@ -395,6 +474,47 @@ export default function WsAiStudio() {
               )}
             </div>
           </Card>
+
+          {/* Viral analysis of the idea */}
+          {viral && (
+            <Card className="p-5">
+              <div className="flex items-center gap-3 flex-wrap mb-1">
+                <h2 className="text-[15px] font-semibold" style={{ color: 'var(--color-text)' }}>🔥 Viral potential</h2>
+                <span className="text-2xl font-bold tnum" style={{ color: scoreColor(viral.score) }}>{viral.score}<span className="text-sm font-semibold" style={{ color: 'var(--color-muted)' }}>/100</span></span>
+                <button onClick={() => setViral(null)} className="ml-auto text-xs" style={{ color: 'var(--color-muted)' }}>Dismiss</button>
+              </div>
+              <p className="text-sm mb-2" style={{ color: 'var(--color-text)' }}>{viral.verdict}</p>
+              {viral.why?.length > 0 && (
+                <ul className="flex flex-col gap-0.5 mb-3">
+                  {viral.why.map((w, i) => <li key={i} className="text-[12px]" style={{ color: 'var(--color-muted)' }}>• {w}</li>)}
+                </ul>
+              )}
+
+              <h3 className="text-[11px] font-bold uppercase tracking-[0.1em] mb-1.5" style={{ color: 'var(--color-muted)' }}>5 angles that travel — best first</h3>
+              <div className="flex flex-col gap-2 mb-3">
+                {viral.angles?.map((a, i) => (
+                  <div key={i} className="rounded-xl p-3" style={{ background: 'var(--color-bg)' }}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>{i + 1}. {a.title}</span>
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase" style={{ background: 'var(--color-surface)', color: 'var(--color-muted)' }}>{a.format}</span>
+                      <button onClick={() => useAngle(a)} className="ml-auto text-xs font-semibold shrink-0" style={{ color: 'var(--color-accent)' }}>Use this angle →</button>
+                    </div>
+                    <p className="text-[13px] mt-1" style={{ color: 'var(--color-text)' }}>“{a.hook}”</p>
+                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-muted)' }}>{a.whyViral}</p>
+                  </div>
+                ))}
+              </div>
+
+              {viral.boosters?.length > 0 && (
+                <>
+                  <h3 className="text-[11px] font-bold uppercase tracking-[0.1em] mb-1" style={{ color: 'var(--color-muted)' }}>Reach boosters</h3>
+                  <ul className="flex flex-col gap-0.5">
+                    {viral.boosters.map((b, i) => <li key={i} className="text-[12px]" style={{ color: 'var(--color-text)' }}>⚡ {b}</li>)}
+                  </ul>
+                </>
+              )}
+            </Card>
+          )}
 
           {result && (
             <Card className="p-5">
@@ -429,22 +549,28 @@ export default function WsAiStudio() {
                 <Button variant="outline" onClick={() => { void navigator.clipboard.writeText(result); toast('Copied') }}>Copy</Button>
                 <Button variant="outline" onClick={() => void saveToContent()}>Save to Content</Button>
                 <Button variant="outline" onClick={() => void anotherPass()} disabled={busy}>↻ Run another pass</Button>
-                <Button variant="outline" onClick={() => void makeImage()} disabled={imgBusy}>{imgBusy ? 'Making image…' : '🖼 Image (optional)'}</Button>
-                <Button variant="outline" onClick={() => void makeVideo()} disabled={vidBusy}>{vidBusy ? (vidNote || 'Making video…') : '🎬 Video (optional)'}</Button>
               </div>
 
-              {imgUrl && (
-                <div className="mt-4">
-                  <img src={imgUrl} alt="Generated" className="rounded-xl w-full max-w-md" />
-                  <a href={imgUrl} download={`${brand.toLowerCase()}-ai-image.png`} className="text-xs font-semibold mt-1.5 inline-block" style={{ color: 'var(--color-accent)' }}>Download image</a>
+              {/* Media bay — static image, moving image, video. Nothing runs on
+                  its own; while rendering, each slot shows its dimensions. */}
+              <div className="mt-5 pt-4" style={{ borderTop: '1px solid var(--color-border)' }}>
+                <div className="flex items-baseline justify-between mb-2 gap-3 flex-wrap">
+                  <h3 className="text-[13px] font-bold" style={{ color: 'var(--color-text)' }}>Media</h3>
+                  <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>Optional — each render costs. The moving image & video animate the static image.</span>
                 </div>
-              )}
-              {vidUrl && (
-                <div className="mt-4">
-                  <video src={vidUrl} controls className="rounded-xl w-full max-w-md" />
-                  <a href={vidUrl} target="_blank" rel="noopener" className="text-xs font-semibold mt-1.5 inline-block" style={{ color: 'var(--color-accent)' }}>Open video ↗</a>
+                <div className="grid sm:grid-cols-3 gap-3">
+                  <MediaSlot label="Static image" dim="1024 × 1024" ratio="1 / 1"
+                    busy={imgBusy} note="" url={imgUrl} kind="image"
+                    action="Generate image" onGen={() => void makeImage()}
+                    fileName={`${brand.toLowerCase()}-ai-image.png`} />
+                  <MediaSlot label="Moving image · 5s" dim="768 × 1280" ratio="3 / 5"
+                    busy={motionBusy} note={motionNote} url={motionUrl} kind="video"
+                    action="Animate it" onGen={() => void makeClip(5)} />
+                  <MediaSlot label="Video · 10s" dim="768 × 1280" ratio="3 / 5"
+                    busy={vidBusy} note={vidNote} url={vidUrl} kind="video"
+                    action="Generate video" onGen={() => void makeClip(10)} />
                 </div>
-              )}
+              </div>
             </Card>
           )}
         </div>

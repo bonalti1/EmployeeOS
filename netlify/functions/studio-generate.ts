@@ -134,6 +134,19 @@ export default async (req: Request): Promise<Response> => {
       return json({ result })
     }
 
+    if (p.mode === 'viral') {
+      const system =
+        'You are a short-form virality analyst. You have internalized the mechanics of clips that actually went viral: a sub-3-second pattern interrupt, a curiosity gap the viewer must close, high relatability or high stakes, an emotion strong enough to share (awe, outrage, humor, pride), a payoff that rewards watching, and platform-native format. You are blunt about weak ideas. STRICT JSON only.'
+      const user = [
+        `Analyze this idea for ${brandLabel} for viral potential on short-form platforms (TikTok / Reels / Shorts).`,
+        ctx,
+        `THE IDEA:\n${input || '(none)'}`,
+        'Return JSON: {"score": 0-100 viral potential as-is, "verdict": one blunt sentence, "why": [2-4 short reasons it can or cannot travel], "angles": [exactly 5 items, ranked best first, each {"title": short name, "hook": the literal first 3 seconds (spoken or on-screen), "format": e.g. POV / before-after / stitch-bait / challenge / storytime / cost-breakdown, "whyViral": which viral mechanic it exploits, in one line}], "boosters": [2-3 concrete things that would multiply reach, e.g. a caption bait, a duet target, a posting time]}',
+      ].join('\n\n')
+      const raw = await chat(apiKey, model, system, user, true)
+      try { return json({ viral: JSON.parse(raw) }) } catch { return json({ error: 'bad_viral' }, 200) }
+    }
+
     return json({ error: 'unknown_mode' }, 400)
   } catch (e) {
     const err = e as Error & { detail?: string; status?: number }
