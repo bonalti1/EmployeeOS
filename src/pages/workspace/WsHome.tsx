@@ -11,6 +11,14 @@ import { PROMPTS } from './WsJournal'
 
 const PRIORITY_ORDER: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
 
+/** Time-of-day greeting, same voice as the Personal OS home. */
+function greeting(): string {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 18) return 'Good afternoon'
+  return 'Good evening'
+}
+
 function SectionTitle({ children, to }: { children: React.ReactNode; to?: string }) {
   return (
     <div className="flex items-center justify-between mb-3">
@@ -75,7 +83,7 @@ export default function WsHome() {
 
   return (
     <WsShell
-      title={role === 'assistant' ? `Good day, ${ASSISTANT_NAME}! Here’s the plan` : `${ASSISTANT_NAME}’s Workspace`}
+      title={`${greeting()}, ${ASSISTANT_NAME} 👋`}
       subtitle={role === 'assistant' ? 'Your daily command center' : `Shared command center for you and ${ASSISTANT_NAME}`}
     >
       {/* Quick add */}

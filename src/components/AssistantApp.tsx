@@ -3,7 +3,7 @@ import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { IconMenu, IconHome, IconTasks, IconFilm, IconJournal } from './icons'
 import { BonaltiLogo } from './Logo'
 import { WS_SECTIONS } from './WorkspaceLayout'
-import { useWorkspace, ASSISTANT_NAME } from '../lib/workspace'
+import { useWorkspace, WORKSPACE_NAME } from '../lib/workspace'
 import { supabase } from '../lib/supabase'
 import WsHome from '../pages/workspace/WsHome'
 import WsTasks from '../pages/workspace/WsTasks'
@@ -68,7 +68,7 @@ function AssistantSidebar({ onNavigate }: { onNavigate?: () => void }) {
 
       <div className="mt-5 mb-5 flex flex-col items-center px-2">
         <BonaltiLogo height={30} />
-        <div className="mt-2.5 text-[10px] font-medium uppercase tracking-[0.22em] opacity-55 text-center">{ASSISTANT_NAME} Operating System</div>
+        <div className="mt-2.5 text-[10px] font-medium uppercase tracking-[0.22em] opacity-55 text-center">{WORKSPACE_NAME} Operating System</div>
       </div>
 
       <div className="flex-1 flex flex-col min-h-0">
@@ -195,7 +195,7 @@ export default function AssistantApp() {
           </button>
           {/* White wordmark → inverted to read on the light glass bar */}
           <span style={{ filter: 'invert(0.85)' }}><BonaltiLogo height={14} /></span>
-          <span className="ml-auto text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--color-muted)' }}>{ASSISTANT_NAME} OS</span>
+          <span className="ml-auto text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--color-muted)' }}>{WORKSPACE_NAME} OS</span>
         </div>
 
         <div key={location.pathname} className="max-w-[100rem] mx-auto px-5 sm:px-6 md:px-10 pt-6 md:pt-8 pb-28 lg:pb-8">

@@ -21,6 +21,14 @@ export type Role = 'owner' | 'assistant'
  */
 export const ASSISTANT_NAME = 'Carlos'
 
+/**
+ * The workspace itself is branded by FUNCTION, not by person — "Content
+ * Operating System". The person is greeted by name (ASSISTANT_NAME above), so
+ * if the seat changes hands only ASSISTANT_NAME needs updating, and if the
+ * function grows only this does.
+ */
+export const WORKSPACE_NAME = 'Content'
+
 export type WsTask = {
   id: string
   title: string
