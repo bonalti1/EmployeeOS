@@ -1,7 +1,7 @@
 import { createContext, useContext, type CSSProperties, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { Card, PageHeader } from './ui'
-import { IconHome, IconTasks, IconFilm, IconFolder, IconBook, IconStamp, IconSpark, IconJournal, IconTrend, IconBulb, IconMegaphone } from './icons'
+import { IconHome, IconTasks, IconFilm, IconFolder, IconStamp, IconSpark, IconJournal, IconTrend, IconBulb } from './icons'
 import { useWorkspace, BRAND_COLORS } from '../lib/workspace'
 
 /**
@@ -16,13 +16,12 @@ export const WS_SECTIONS = [
   { to: '/workspace/tasks', label: 'Tasks', Icon: IconTasks },
   { to: '/workspace/ideas', label: 'Ideas', Icon: IconBulb },
   { to: '/workspace/content', label: 'Content', Icon: IconFilm },
-  { to: '/workspace/marketing', label: 'Marketing', Icon: IconMegaphone },
-  { to: '/workspace/trends', label: 'Trends', Icon: IconTrend },
   { to: '/workspace/journal', label: 'Journal', Icon: IconJournal },
   { to: '/workspace/media', label: 'Media', Icon: IconFolder },
-  { to: '/workspace/sops', label: 'SOPs', Icon: IconBook },
   { to: '/workspace/approvals', label: 'Approvals', Icon: IconStamp },
   { to: '/workspace/ai', label: 'AI Studio', Icon: IconSpark },
+  // Trends feeds AI Studio, so it sits directly beneath it.
+  { to: '/workspace/trends', label: 'Trends', Icon: IconTrend },
 ]
 
 export const wsField: CSSProperties = { background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }

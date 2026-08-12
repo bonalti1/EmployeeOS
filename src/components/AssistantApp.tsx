@@ -11,10 +11,8 @@ import WsContent from '../pages/workspace/WsContent'
 import WsJournal from '../pages/workspace/WsJournal'
 import WsTrends from '../pages/workspace/WsTrends'
 import WsIdeas from '../pages/workspace/WsIdeas'
-import MktStudio from '../pages/marketing/MktStudio'
 import IdeaCapture from './IdeaCapture'
 import WsMedia from '../pages/workspace/WsMedia'
-import WsSops from '../pages/workspace/WsSops'
 import WsApprovals from '../pages/workspace/WsApprovals'
 import WsAiStudio from '../pages/workspace/WsAiStudio'
 
@@ -209,11 +207,9 @@ export default function AssistantApp() {
             <Route path="/workspace/tasks" element={<WsTasks />} />
             <Route path="/workspace/content" element={<WsContent />} />
             <Route path="/workspace/ideas" element={<WsIdeas />} />
-            <Route path="/workspace/marketing/*" element={<MktStudio />} />
             <Route path="/workspace/trends" element={<WsTrends />} />
             <Route path="/workspace/journal" element={<WsJournal />} />
             <Route path="/workspace/media" element={<WsMedia />} />
-            <Route path="/workspace/sops" element={<WsSops />} />
             <Route path="/workspace/approvals" element={<WsApprovals />} />
             <Route path="/workspace/ai" element={<WsAiStudio />} />
             {/* Anything else — including every private Personal OS URL — lands on the assistant home. */}

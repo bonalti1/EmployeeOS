@@ -40,7 +40,7 @@ export default async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
   let payload: {
-    tool?: string; brand?: string; input?: string
+    tool?: string; brand?: string; brandLabel?: string; input?: string
     context?: { companyContext?: string; brandVoice?: string; trends?: string }
   }
   try {
@@ -63,7 +63,10 @@ export default async (req: Request): Promise<Response> => {
   if (!apiKey) return json({ error: 'not_configured', message: 'The AI key is not set up yet.' }, 200)
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini'
 
-  const brand = payload.brand === 'ALTO' ? 'ALTO Pro' : payload.brand === 'STB' ? 'South Texas Builders (STB)' : 'both brands'
+  // The client's brand tabs are the source of truth for the name; the older
+  // STB/ALTO mapping stays as a fallback for callers that don't send a label.
+  const brand = (payload.brandLabel || '').trim()
+    || (payload.brand === 'ALTO' ? 'ALTO Pro' : payload.brand === 'STB' ? 'South Texas Builders (STB)' : 'both brands')
   const ctx = payload.context || {}
   const trends = (ctx.trends || '').trim().slice(0, 4000)
   const user = [

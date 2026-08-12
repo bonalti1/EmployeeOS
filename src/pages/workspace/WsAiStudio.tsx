@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { Card, Button } from '../../components/ui'
 import { IconSpark } from '../../components/icons'
 import { WsShell, wsField } from '../../components/WorkspaceLayout'
+import BrandKitPanel from './BrandKitPanel'
+import { BRAND_KEYS, BRAND_LABEL, kitKey, parseKit, kitSummary, type BrandKey } from '../../lib/brandKit'
 import { useToast } from '../../lib/toast'
 import { useEffect } from 'react'
 import {
@@ -69,7 +71,7 @@ export default function WsAiStudio() {
   const dnaVoices = useBrandDnaVoice()
 
   const [tool, setTool] = useState<ToolId>('brainstorm')
-  const [brand, setBrand] = useState<'STB' | 'ALTO'>('STB')
+  const [brand, setBrand] = useState<BrandKey>('STB')
   const [input, setInput] = useState('')
   const [result, setResult] = useState('')
   const [busy, setBusy] = useState(false)
@@ -111,12 +113,17 @@ export default function WsAiStudio() {
         body: JSON.stringify({
           tool,
           brand,
+          brandLabel: BRAND_LABEL[brand],
           input: text,
           context: {
             companyContext: settings['company_context'] || '',
-            // Marketing Studio Brand DNA wins when it exists; legacy fields otherwise.
-            brandVoice: (brand === 'STB' ? dnaVoices['stb'] : dnaVoices['alto'])
-              || (brand === 'STB' ? settings['brand_voice_stb'] || '' : settings['brand_voice_alto'] || ''),
+            // Brand voice, plus the kit (colours, type, usage notes) so drafts
+            // land on-brand visually as well as in tone.
+            brandVoice: [
+              (brand === 'STB' ? dnaVoices['stb'] : brand === 'ALTO' ? dnaVoices['alto'] : '')
+                || (brand === 'STB' ? settings['brand_voice_stb'] || '' : brand === 'ALTO' ? settings['brand_voice_alto'] || '' : ''),
+              kitSummary(parseKit(settings[kitKey(brand)])),
+            ].filter(Boolean).join('\n\n'),
             trends: trendContext,
           },
         }),
@@ -149,6 +156,31 @@ export default function WsAiStudio() {
       title="AI Studio"
       subtitle="Drafting help for ideas, hooks, scripts and captions — grounded in your brand voice"
     >
+      {/* Brand tabs — one per company; everything below works on this brand */}
+      <div className="flex gap-2 mb-5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+        {BRAND_KEYS.map((b) => {
+          const on = brand === b
+          const kit = parseKit(settings[kitKey(b)])
+          const accent = kit.colors?.[0]
+          return (
+            <button key={b} onClick={() => { setBrand(b); setResult(''); setError('') }}
+              className="flex items-center gap-2.5 rounded-2xl px-4 py-2.5 shrink-0 transition"
+              style={{
+                background: on ? 'var(--color-surface)' : 'var(--color-bg)',
+                border: on ? `1.5px solid ${accent || 'var(--color-accent)'}` : '1px solid var(--color-border)',
+                boxShadow: on ? 'var(--shadow-sm)' : 'none',
+              }}>
+              {kit.logo
+                ? <img src={kit.logo} alt="" draggable={false} style={{ height: 20, width: 'auto', maxWidth: 64, objectFit: 'contain' }} />
+                : <span className="rounded-full" style={{ width: 10, height: 10, background: accent || 'var(--color-border)' }} />}
+              <span className="text-[13px] font-bold whitespace-nowrap" style={{ color: on ? 'var(--color-text)' : 'var(--color-muted)' }}>
+                {BRAND_LABEL[b]}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
       <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
         <div className="flex flex-col gap-4">
           {/* Tool picker */}
@@ -167,20 +199,6 @@ export default function WsAiStudio() {
           </div>
 
           <Card className="p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>For:</span>
-              {(['STB', 'ALTO'] as const).map((b) => (
-                <button key={b} onClick={() => setBrand(b)}
-                  className="px-3 py-1 rounded-full text-[12px] font-bold transition"
-                  style={{
-                    background: brand === b ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)' : 'transparent',
-                    color: brand === b ? 'var(--color-accent)' : 'var(--color-muted)',
-                    border: '1px solid var(--color-border)',
-                  }}>
-                  {b === 'STB' ? 'South Texas Builders' : 'ALTO Pro'}
-                </button>
-              ))}
-            </div>
             <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>{activeTool.hint}</label>
             <textarea value={input} onChange={(e) => setInput(e.target.value)} rows={5}
               placeholder={activeTool.placeholder}
@@ -213,6 +231,13 @@ export default function WsAiStudio() {
         </div>
 
         <div className="flex flex-col gap-5">
+        <BrandKitPanel
+          brand={brand}
+          raw={settings[kitKey(brand)]}
+          canEdit={role === 'owner'}
+          onSave={(value) => set(kitKey(brand), value)}
+        />
+
         {/* What research is actually in play right now */}
         <Card className="p-5">
           <div className="flex items-center justify-between mb-2">
