@@ -222,6 +222,13 @@ export function useWorkspace() {
 
 type WsRow = { id: string }
 
+// Every subscription gets a unique channel topic. Reusing a topic that is
+// already subscribed (e.g. two components watching the same table — the Ideas
+// page + the floating idea capture both watch ws_ideas) makes supabase-js
+// throw "cannot add postgres_changes callbacks after subscribe()" and crashes
+// the screen. A per-mount suffix makes collisions impossible.
+let wsChannelSeq = 0
+
 export function useWsTable<T extends WsRow>(table: string, orderBy = 'created_at', ascending = false) {
   const [rows, setRows] = useState<T[] | null>(null)
   const [error, setError] = useState('')
@@ -237,16 +244,19 @@ export function useWsTable<T extends WsRow>(table: string, orderBy = 'created_at
   useEffect(() => {
     if (!supabase) { setRows([]); return }
     void refresh()
-    const channel = supabase
-      .channel(`ws_${table}_changes`)
-      .on('postgres_changes', { event: '*', schema: 'public', table }, () => { void refresh() })
-      .subscribe()
+    let channel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null
+    try {
+      channel = supabase
+        .channel(`ws_${table}_changes_${++wsChannelSeq}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table }, () => { void refresh() })
+        .subscribe()
+    } catch { /* realtime unavailable — refresh-on-focus below still keeps data fresh */ }
     // Realtime events can be missed while backgrounded — re-pull on focus.
     const onWake = () => { if (document.visibilityState === 'visible') void refresh() }
     document.addEventListener('visibilitychange', onWake)
     window.addEventListener('focus', onWake)
     return () => {
-      channel.unsubscribe()
+      if (channel) { try { void supabase?.removeChannel(channel) } catch { /* ignore */ } }
       document.removeEventListener('visibilitychange', onWake)
       window.removeEventListener('focus', onWake)
     }
@@ -294,11 +304,14 @@ export function useWsSettings() {
   useEffect(() => {
     if (!supabase) { setRows([]); return }
     void refresh()
-    const channel = supabase
-      .channel('ws_settings_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ws_settings' }, () => { void refresh() })
-      .subscribe()
-    return () => { channel.unsubscribe() }
+    let channel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null
+    try {
+      channel = supabase
+        .channel(`ws_settings_changes_${++wsChannelSeq}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'ws_settings' }, () => { void refresh() })
+        .subscribe()
+    } catch { /* realtime unavailable */ }
+    return () => { if (channel) { try { void supabase?.removeChannel(channel) } catch { /* ignore */ } } }
   }, [refresh])
 
   const map: Record<string, string> = {}

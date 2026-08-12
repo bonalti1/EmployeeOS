@@ -120,6 +120,7 @@ async function doPullAndMerge() {
 }
 
 let channel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null
+let channelSeq = 0
 let onWake: (() => void) | null = null
 
 /** Begin syncing for the signed-in user. Safe to call again after re-auth. */
@@ -129,11 +130,16 @@ export async function startCloudSync(uid: string) {
   await pullAndMerge()
   setLocalWriteListener(queuePush)
 
-  // Live updates from your other devices.
-  channel?.unsubscribe()
-  channel = supabase
-    .channel('app_state_changes')
-    .on(
+  // Live updates from your other devices. Fully remove any prior channel first
+  // and use a fresh channel name each time — startCloudSync re-runs on every
+  // auth event (including token refresh), and reusing a topic that's already
+  // subscribed makes supabase-js throw "cannot add postgres_changes callbacks
+  // after subscribe()", which would crash the app. Wrapped so a realtime failure
+  // degrades gracefully: the pull-on-focus below keeps devices in sync anyway.
+  try {
+    if (channel) { await supabase.removeChannel(channel); channel = null }
+    const ch = supabase.channel(`app_state_changes_${++channelSeq}`)
+    ch.on(
       'postgres_changes',
       { event: '*', schema: 'public', table: TABLE, filter: `user_id=eq.${uid}` },
       (payload) => {
@@ -143,7 +149,9 @@ export async function startCloudSync(uid: string) {
         if (ms >= (loadTimes()[row.key] ?? 0)) applyRemote(row.key, row.value, ms)
       },
     )
-    .subscribe()
+    ch.subscribe()
+    channel = ch
+  } catch { /* realtime unavailable — pull-on-focus still keeps devices in sync */ }
 
   // Re-pull whenever the app comes back to the foreground or the network
   // returns, so opening it on another device always shows the latest — even if
@@ -162,6 +170,5 @@ export async function stopCloudSync() {
   pending.clear()
   userId = null
   if (onWake) { document.removeEventListener('visibilitychange', onWake); window.removeEventListener('online', onWake); window.removeEventListener('focus', onWake); onWake = null }
-  await channel?.unsubscribe()
-  channel = null
+  if (channel) { try { await supabase?.removeChannel(channel) } catch { /* ignore */ } channel = null }
 }

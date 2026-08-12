@@ -58,8 +58,11 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!cloudConfigured || !supabase) { setStatus('ready'); return }
     let done = false
+    let bootedUid: string | null = null
 
     const boot = async (uid: string) => {
+      if (uid === bootedUid) return // already syncing this user (e.g. token refresh)
+      bootedUid = uid
       setStatus('syncing')
       try { await startCloudSync(uid) } catch { /* offline — local copy still shows */ }
       if (!done) setStatus('ready')
@@ -73,7 +76,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
 
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       if (session) boot(session.user.id)
-      else setStatus('signed-out')
+      else { bootedUid = null; setStatus('signed-out') }
     })
     return () => { done = true; sub.subscription.unsubscribe() }
   }, [])

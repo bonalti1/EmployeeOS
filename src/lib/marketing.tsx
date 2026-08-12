@@ -293,6 +293,10 @@ export function useMktCompany() {
 // Company-scoped table hook — the .eq('company_id') is in the DB query itself
 // ---------------------------------------------------------------------------
 
+// Unique per-mount channel topics: reusing an already-subscribed topic makes
+// supabase-js throw "cannot add postgres_changes callbacks after subscribe()".
+let mktChannelSeq = 0
+
 export function useMktTable<T extends { id: string }>(
   table: string,
   companyId: string | null,
@@ -316,11 +320,14 @@ export function useMktTable<T extends { id: string }>(
     setRows(null)
     if (!supabase || !companyId) { setRows([]); return }
     void refresh()
-    const channel = supabase
-      .channel(`mkt_${table}_${companyId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table, filter: `company_id=eq.${companyId}` }, () => { void refresh() })
-      .subscribe()
-    return () => { channel.unsubscribe() }
+    let channel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null
+    try {
+      channel = supabase
+        .channel(`mkt_${table}_${companyId}_${++mktChannelSeq}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table, filter: `company_id=eq.${companyId}` }, () => { void refresh() })
+        .subscribe()
+    } catch { /* realtime unavailable */ }
+    return () => { if (channel) { try { void supabase?.removeChannel(channel) } catch { /* ignore */ } } }
   }, [table, companyId, refresh])
 
   const insert = useCallback(async (values: Partial<T>) => {
