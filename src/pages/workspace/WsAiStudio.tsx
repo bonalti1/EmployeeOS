@@ -66,14 +66,19 @@ const IMG_ASPECTS: { id: ImgAspect; label: string; dim: string; ratio: string }[
   { id: 'story', label: 'Story / Reel', dim: '1024 × 1536', ratio: '2 / 3' },
 ]
 
-/** One bay in the media strip: label + dimensions, a placeholder that shows the
- * size while rendering, the media once it exists. Nothing generates on its own. */
-function MediaSlot({ label, dim, ratio, busy, note, url, kind, action, onGen, fileName, expect }: {
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+
+/**
+ * One frame in the creative studio: an empty state that invites the click, a
+ * live render state (shimmering canvas, elapsed clock, a progress bar paced to
+ * how long this kind of render usually takes, and the stage it is on), then the
+ * finished asset with its actions. Nothing ever generates on its own.
+ */
+function MediaSlot({ label, dim, ratio, busy, note, url, kind, action, onGen, fileName, expectSec, icon, hero }: {
   label: string; dim: string; ratio: string; busy: boolean; note: string
   url: string; kind: 'image' | 'video'; action: string; onGen: () => void; fileName?: string
-  expect?: string
+  expectSec: number; icon: string; hero?: boolean
 }) {
-  // Elapsed-seconds ticker while rendering, so a long render never looks stuck.
   const [t, setT] = useState(0)
   useEffect(() => {
     if (!busy) { setT(0); return }
@@ -81,34 +86,66 @@ function MediaSlot({ label, dim, ratio, busy, note, url, kind, action, onGen, fi
     return () => clearInterval(iv)
   }, [busy])
 
+  // Eases toward 95% over the expected duration, then crawls — honest about
+  // "nearly there" without ever claiming done before it is.
+  const pct = Math.min(95, Math.round((1 - Math.exp(-2.2 * (t / expectSec))) * 95))
+
   return (
-    <div className="rounded-xl p-3 flex flex-col gap-2" style={{ border: '1px dashed var(--color-border)', background: 'var(--color-bg)' }}>
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-xs font-bold" style={{ color: 'var(--color-text)' }}>{label}</span>
-        <span className="text-[10px] tnum shrink-0" style={{ color: 'var(--color-muted)' }}>{dim}</span>
+    <div className="rounded-2xl overflow-hidden flex flex-col"
+      style={{
+        background: 'var(--color-surface)',
+        border: `1px solid ${busy ? 'var(--color-accent)' : 'var(--color-border)'}`,
+        boxShadow: busy ? '0 0 0 3px color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'var(--shadow-sm)',
+        transition: 'box-shadow .25s, border-color .25s',
+      }}>
+      <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: '1px solid var(--color-border)' }}>
+        <span className="text-[13px]">{icon}</span>
+        <span className={`${hero ? 'text-[13px]' : 'text-xs'} font-bold truncate`} style={{ color: 'var(--color-text)' }}>{label}</span>
+        <span className="text-[10px] tnum ml-auto shrink-0 px-1.5 py-0.5 rounded"
+          style={{ background: 'var(--color-bg)', color: 'var(--color-muted)' }}>{dim}</span>
       </div>
-      {url ? (
-        <>
-          {kind === 'image'
-            ? <img src={url} alt={label} className="w-full rounded-lg" style={{ aspectRatio: ratio, objectFit: 'cover' }} />
-            : <video src={url} controls playsInline className="w-full rounded-lg" style={{ aspectRatio: ratio, objectFit: 'cover', background: '#000' }} />}
-          {kind === 'image'
-            ? <a href={url} download={fileName || 'ai-image.png'} className="text-[11px] font-semibold" style={{ color: 'var(--color-accent)' }}>Download</a>
-            : <a href={url} target="_blank" rel="noopener" className="text-[11px] font-semibold" style={{ color: 'var(--color-accent)' }}>Open ↗</a>}
-        </>
-      ) : (
-        <div className="grid place-items-center rounded-lg" style={{ aspectRatio: ratio, background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-          {busy ? (
-            <div className="text-center px-3">
-              <span className="inline-block rounded-full animate-spin mb-2" style={{ width: 20, height: 20, border: '2.5px solid var(--color-border)', borderTopColor: 'var(--color-accent)' }} />
-              <p className="text-[11px] font-semibold" style={{ color: 'var(--color-text)' }}>{note || 'Generating…'} <span className="tnum">{t}s</span></p>
-              <p className="text-[10px] tnum mt-0.5" style={{ color: 'var(--color-muted)' }}>{dim}{expect ? ` · usually ${expect}` : ''}</p>
+
+      <div className="relative" style={{ aspectRatio: ratio, background: 'var(--color-bg)' }}>
+        {url ? (
+          kind === 'image'
+            ? <img src={url} alt={label} className="absolute inset-0 w-full h-full" style={{ objectFit: 'cover' }} />
+            : <video src={url} controls playsInline className="absolute inset-0 w-full h-full" style={{ objectFit: 'cover', background: '#000' }} />
+        ) : busy ? (
+          <>
+            {/* shimmering canvas */}
+            <div className="absolute inset-0 animate-pulse"
+              style={{ background: 'linear-gradient(115deg, var(--color-bg) 0%, color-mix(in srgb, var(--color-accent) 10%, var(--color-bg)) 45%, var(--color-bg) 90%)' }} />
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 px-4 text-center">
+              <span className="inline-block rounded-full animate-spin"
+                style={{ width: 26, height: 26, border: '3px solid color-mix(in srgb, var(--color-accent) 25%, transparent)', borderTopColor: 'var(--color-accent)' }} />
+              <p className="text-[12px] font-bold" style={{ color: 'var(--color-text)' }}>{note || 'Generating…'}</p>
+              <div className="w-full max-w-[190px]">
+                <div className="rounded-full overflow-hidden" style={{ height: 5, background: 'var(--color-border)' }}>
+                  <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'var(--color-accent)', transition: 'width 1s linear' }} />
+                </div>
+                <div className="flex justify-between mt-1 text-[10px] tnum" style={{ color: 'var(--color-muted)' }}>
+                  <span>{mmss(t)}</span>
+                  <span>~{mmss(expectSec)}</span>
+                </div>
+              </div>
             </div>
-          ) : (
-            <button onClick={onGen} className="text-xs font-semibold px-3 py-2 rounded-lg" style={{ color: 'var(--color-accent)', border: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
-              {action}
-            </button>
-          )}
+          </>
+        ) : (
+          <button onClick={onGen} className="absolute inset-0 w-full h-full flex flex-col items-center justify-center gap-2 transition hover:opacity-80">
+            <span className="grid place-items-center rounded-full"
+              style={{ width: 46, height: 46, background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', color: 'var(--color-accent)', fontSize: 20 }}>{icon}</span>
+            <span className="text-[12px] font-bold" style={{ color: 'var(--color-accent)' }}>{action}</span>
+            <span className="text-[10px] tnum" style={{ color: 'var(--color-muted)' }}>~{mmss(expectSec)}</span>
+          </button>
+        )}
+      </div>
+
+      {url && (
+        <div className="flex items-center gap-3 px-3 py-2" style={{ borderTop: '1px solid var(--color-border)' }}>
+          {kind === 'image'
+            ? <a href={url} download={fileName || 'ai-image.png'} className="text-[11px] font-bold" style={{ color: 'var(--color-accent)' }}>↓ Download</a>
+            : <a href={url} target="_blank" rel="noopener" className="text-[11px] font-bold" style={{ color: 'var(--color-accent)' }}>Open ↗</a>}
+          <button onClick={onGen} className="text-[11px] font-semibold ml-auto" style={{ color: 'var(--color-muted)' }}>↻ Redo</button>
         </div>
       )}
     </div>
@@ -178,6 +215,7 @@ export default function WsAiStudio() {
   const [imgStyle, setImgStyle] = useState<ImgStyle>('lifestyle')
   const [imgAspect, setImgAspect] = useState<ImgAspect>('portrait')
   const [imgText, setImgText] = useState(true)
+  const [hd, setHd] = useState(false)   // medium renders ~2x faster and reads the same on a phone
   const [brief, setBrief] = useState<ImageBrief | null>(null)
   const [motionBusy, setMotionBusy] = useState(false)
   const [motionUrl, setMotionUrl] = useState('')
@@ -347,7 +385,7 @@ export default function WsAiStudio() {
     ].filter(Boolean).join(' ')
 
     setImgNote('Rendering the creative…')
-    const r = await post('studio-image', { prompt, aspect: imgAspect })
+    const r = await post('studio-image', { prompt, aspect: imgAspect, quality: hd ? 'high' : 'medium' })
     setImgBusy(false); setImgNote('')
     const url = String(r.dataUrl || r.url || '')
     if (url) { setImgUrl(url); return url }
@@ -646,34 +684,45 @@ export default function WsAiStudio() {
                       <input type="checkbox" checked={imgText} onChange={(e) => setImgText(e.target.checked)} />
                       Headline on image (flyer)
                     </label>
+                    <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer" style={{ color: 'var(--color-muted)' }}
+                      title="HD renders sharper but takes about twice as long">
+                      <input type="checkbox" checked={hd} onChange={(e) => setHd(e.target.checked)} />
+                      HD (slower)
+                    </label>
                   </div>
                   <p className="text-[11px] mt-2" style={{ color: 'var(--color-muted)' }}>
                     {IMG_STYLES.find((s) => s.id === imgStyle)?.hint}
                   </p>
                 </div>
 
-                <div className="grid sm:grid-cols-3 gap-3">
-                  <MediaSlot
+                {/* Hero creative on the left, the two clips stacked beside it */}
+                <div className="grid lg:grid-cols-[minmax(0,360px)_1fr] gap-3 items-start">
+                  <MediaSlot hero
+                    icon="🖼"
                     label={imgText ? 'Ad creative / flyer' : 'Ad creative'}
                     dim={IMG_ASPECTS.find((a) => a.id === imgAspect)!.dim}
                     ratio={IMG_ASPECTS.find((a) => a.id === imgAspect)!.ratio}
                     busy={imgBusy} note={imgNote} url={imgUrl} kind="image"
-                    action="Generate creative" onGen={() => void makeImage()}
-                    fileName={`${brand.toLowerCase()}-ad.png`} expect="30–60s" />
-                  <MediaSlot label="Moving image · 5s" dim="768 × 1280" ratio="3 / 5"
-                    busy={motionBusy} note={motionNote} url={motionUrl} kind="video"
-                    action="Animate it" onGen={() => void makeClip(5)} expect="1–2 min" />
-                  <MediaSlot label="Video · 10s" dim="768 × 1280" ratio="3 / 5"
-                    busy={vidBusy} note={vidNote} url={vidUrl} kind="video"
-                    action="Generate video" onGen={() => void makeClip(10)} expect="2–4 min" />
+                    action="Generate creative" onGen={() => void makeImage(!!imgUrl)}
+                    fileName={`${brand.toLowerCase()}-ad.png`} expectSec={hd ? 55 : 25} />
+                  <div className="grid grid-cols-2 lg:grid-cols-1 gap-3">
+                    <MediaSlot icon="✨" label="Moving image · 5s" dim="768 × 1280" ratio="3 / 5"
+                      busy={motionBusy} note={motionNote} url={motionUrl} kind="video"
+                      action="Animate it" onGen={() => void makeClip(5)} expectSec={90} />
+                    <MediaSlot icon="🎬" label="Video · 10s" dim="768 × 1280" ratio="3 / 5"
+                      busy={vidBusy} note={vidNote} url={vidUrl} kind="video"
+                      action="Generate video" onGen={() => void makeClip(10)} expectSec={180} />
+                  </div>
                 </div>
 
-                {imgUrl && (
-                  <div className="flex items-center gap-3 mt-2 flex-wrap">
-                    <Button variant="outline" onClick={() => void makeImage(true)} disabled={imgBusy}>↻ New variation</Button>
-                    {brief?.rationale && (
-                      <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>Why it stops the scroll: {brief.rationale}</span>
+                {(brief?.headline || brief?.rationale) && (
+                  <div className="rounded-xl p-3 mt-3" style={{ background: 'var(--color-bg)' }}>
+                    {brief.headline && (
+                      <p className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>
+                        “{brief.headline}”{brief.subhead ? <span className="font-normal" style={{ color: 'var(--color-muted)' }}> — {brief.subhead}</span> : null}
+                      </p>
                     )}
+                    {brief.rationale && <p className="text-[11px] mt-1" style={{ color: 'var(--color-muted)' }}>Why it stops the scroll: {brief.rationale}</p>}
                   </div>
                 )}
               </div>
