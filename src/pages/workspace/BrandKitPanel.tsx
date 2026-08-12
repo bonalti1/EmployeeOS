@@ -1,11 +1,13 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Card, Button, Input } from '../../components/ui'
 import { wsField } from '../../components/WorkspaceLayout'
 import { useToast } from '../../lib/toast'
+import { useConfirmDelete } from '../../lib/confirmDelete'
 import {
   toLogoDataUrl, extractPalette, parseKit, BRAND_LABEL,
   type BrandKey, type BrandKit,
 } from '../../lib/brandKit'
+import { listPhotos, addPhoto, removePhoto, type WsPhoto } from '../../lib/wsPhotos'
 
 /**
  * The brand kit for one company: drop in the logo and the palette is read
@@ -23,11 +25,29 @@ export default function BrandKitPanel({ brand, raw, onSave, canEdit }: {
   canEdit: boolean
 }) {
   const { toast } = useToast()
+  const confirmDelete = useConfirmDelete()
   const kit = parseKit(raw)
   const fileRef = useRef<HTMLInputElement>(null)
+  const photoRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<BrandKit>(kit)
+
+  // The permanent photo library for this brand — real projects, kept for good.
+  const [photos, setPhotos] = useState<WsPhoto[] | null>(null)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const refreshPhotos = async () => setPhotos(await listPhotos(brand))
+  useEffect(() => { void refreshPhotos() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [brand])
+
+  const uploadPhotos = async (files: FileList | null) => {
+    if (!files?.length) return
+    setPhotoBusy(true)
+    let ok = 0
+    for (const f of Array.from(files)) if (await addPhoto(brand, f)) ok++
+    await refreshPhotos()
+    setPhotoBusy(false)
+    toast(ok ? `${ok} photo${ok === 1 ? '' : 's'} added` : 'Upload failed — check your connection')
+  }
 
   const persist = async (next: BrandKit) => {
     await onSave(JSON.stringify(next))
@@ -112,6 +132,50 @@ export default function BrandKitPanel({ brand, raw, onSave, canEdit }: {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Permanent photo library — real projects, reused by every ad creative */}
+      <div className="rounded-xl p-3 mb-3" style={{ background: 'var(--color-bg)' }}>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <span className="text-xs font-bold" style={{ color: 'var(--color-text)' }}>
+            Project photos {photos?.length ? `· ${photos.length}` : ''}
+          </span>
+          <button onClick={() => photoRef.current?.click()} disabled={photoBusy}
+            className="text-[11px] font-bold" style={{ color: 'var(--color-accent)' }}>
+            {photoBusy ? 'Uploading…' : '+ Add photos'}
+          </button>
+        </div>
+        <p className="text-[11px] mb-2" style={{ color: 'var(--color-muted)' }}>
+          Real homes you built. AI Studio builds ads straight from these — nothing invented, nothing fake.
+        </p>
+        {photos === null ? (
+          <p className="text-[11px]" style={{ color: 'var(--color-muted)' }}>Loading…</p>
+        ) : photos.length === 0 ? (
+          <button onClick={() => photoRef.current?.click()}
+            className="w-full rounded-lg py-4 text-[11px] font-semibold"
+            style={{ border: '1px dashed var(--color-border)', color: 'var(--color-muted)', background: 'var(--color-surface)' }}>
+            📷 Add your first project photos
+          </button>
+        ) : (
+          <div className="grid grid-cols-3 gap-1.5">
+            {photos.map((p) => (
+              <div key={p.path} className="group relative rounded-lg overflow-hidden" style={{ aspectRatio: '4 / 3', border: '1px solid var(--color-border)' }}>
+                <img src={p.url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+                <button
+                  onClick={() => confirmDelete({
+                    label: 'this project photo',
+                    detail: 'It will be removed from the brand library.',
+                    onConfirm: () => { void removePhoto(p.path).then(refreshPhotos) },
+                  })}
+                  className="absolute top-1 right-1 rounded-md px-1.5 opacity-0 group-hover:opacity-100 transition"
+                  style={{ background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 11 }}
+                  aria-label="Remove photo">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <input ref={photoRef} type="file" accept="image/*" multiple className="hidden"
+          onChange={(e) => { void uploadPhotos(e.target.files); e.currentTarget.value = '' }} />
       </div>
 
       {editing ? (

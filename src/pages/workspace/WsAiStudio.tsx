@@ -11,6 +11,8 @@ import {
 import { supabase } from '../../lib/supabase'
 import BrandKitPanel from './BrandKitPanel'
 import { BRAND_KEYS, BRAND_LABEL, kitKey, parseKit, kitSummary, toLogoDataUrl, type BrandKey } from '../../lib/brandKit'
+import { listPhotos, photoToDataUrl, type WsPhoto } from '../../lib/wsPhotos'
+import { composeAd } from '../../lib/composeAd'
 import { MENTORS } from '../../lib/mentors'
 
 /**
@@ -215,6 +217,10 @@ export default function WsAiStudio() {
   const [imgStyle, setImgStyle] = useState<ImgStyle>('hero')
   const [srcPhoto, setSrcPhoto] = useState('')   // a real project photo to build the ad from
   const srcRef = useRef<HTMLInputElement>(null)
+  const [library, setLibrary] = useState<WsPhoto[]>([])
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [brandLogo, setBrandLogo] = useState(true)   // stamp the real logo on the finished ad
+  const [rawImg, setRawImg] = useState('')           // pre-branding render, for restamping
   const [imgAspect, setImgAspect] = useState<ImgAspect>('portrait')
   const [imgText, setImgText] = useState(true)
   const [hd, setHd] = useState(false)   // medium renders ~2x faster and reads the same on a phone
@@ -266,6 +272,13 @@ export default function WsAiStudio() {
   })
 
   const mentor = MENTORS.find((m) => m.id === mentorId)
+
+  // The brand's permanent photo library, refreshed when the brand tab changes.
+  useEffect(() => {
+    let alive = true
+    void listPhotos(brand).then((p) => { if (alive) setLibrary(p) })
+    return () => { alive = false }
+  }, [brand])
 
   /** Pull a "LENS: …" first line off a best-fit draft. */
   const splitLens = (raw: string): { lens: string; body: string } => {
@@ -396,11 +409,35 @@ export default function WsAiStudio() {
       prompt, aspect: imgAspect, quality: hd ? 'high' : 'medium',
       ...(srcPhoto ? { sourcePhoto: srcPhoto } : {}),
     })
-    setImgBusy(false); setImgNote('')
     const url = String(r.dataUrl || r.url || '')
-    if (url) { setImgUrl(url); return url }
-    toast(r.error === 'not_configured' ? String(r.message) : `Image failed: ${r.detail || r.error || 'try again'}`)
-    return ''
+    if (!url) {
+      setImgBusy(false); setImgNote('')
+      toast(r.error === 'not_configured' ? String(r.message) : `Image failed: ${r.detail || r.error || 'try again'}`)
+      return ''
+    }
+
+    // Brand finishing pass: stamp the REAL logo file and exact brand colour on
+    // the render — an image model can only ever approximate a wordmark.
+    setRawImg(url)
+    const final = await brandStamp(url, kit)
+    setImgBusy(false); setImgNote('')
+    setImgUrl(final)
+    return final
+  }
+
+  /** Composite the actual logo + brand accent onto a finished render. */
+  const brandStamp = async (url: string, kit = parseKit(settings[kitKey(brand)])): Promise<string> => {
+    if (!brandLogo || !kit.logo) return url
+    try {
+      setImgNote('Applying your logo…')
+      return await composeAd({
+        imageUrl: url,
+        logoUrl: kit.logo,
+        placement: 'bottom-left',
+        logoScale: 0.3,
+        accentColor: kit.colors?.[0],
+      })
+    } catch { return url }
   }
 
   /** Moving image (5s) or video (10s) — both animate the static image. */
@@ -695,6 +732,20 @@ export default function WsAiStudio() {
                       Headline on image (flyer)
                     </label>
                     <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer" style={{ color: 'var(--color-muted)' }}
+                      title="Stamps your real logo file and brand colour onto the finished ad">
+                      <input type="checkbox" checked={brandLogo}
+                        onChange={async (e) => {
+                          setBrandLogo(e.target.checked)
+                          if (rawImg) {
+                            const kit = parseKit(settings[kitKey(brand)])
+                            setImgUrl(e.target.checked && kit.logo
+                              ? await composeAd({ imageUrl: rawImg, logoUrl: kit.logo, placement: 'bottom-left', logoScale: 0.3, accentColor: kit.colors?.[0] })
+                              : rawImg)
+                          }
+                        }} />
+                      Logo on ad
+                    </label>
+                    <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer" style={{ color: 'var(--color-muted)' }}
                       title="HD renders sharper but takes about twice as long">
                       <input type="checkbox" checked={hd} onChange={(e) => setHd(e.target.checked)} />
                       HD (slower)
@@ -720,14 +771,35 @@ export default function WsAiStudio() {
                         A home you actually built beats anything AI invents — and never looks fake.
                       </p>
                     </div>
-                    <div className="flex gap-3 ml-auto">
+                    <div className="flex gap-3 ml-auto items-center">
+                      {library.length > 0 && (
+                        <button onClick={() => setPickerOpen((v) => !v)} className="text-[11px] font-bold" style={{ color: 'var(--color-accent)' }}>
+                          {pickerOpen ? 'Hide library' : `Library · ${library.length}`}
+                        </button>
+                      )}
                       <button onClick={() => srcRef.current?.click()} className="text-[11px] font-bold" style={{ color: 'var(--color-accent)' }}>
-                        {srcPhoto ? 'Change photo' : 'Upload photo'}
+                        {srcPhoto ? 'Change' : 'Upload'}
                       </button>
                       {srcPhoto && (
                         <button onClick={() => setSrcPhoto('')} className="text-[11px] font-semibold" style={{ color: 'var(--color-muted)' }}>Remove</button>
                       )}
                     </div>
+
+                    {/* Pick from the brand's permanent library */}
+                    {pickerOpen && (
+                      <div className="w-full grid grid-cols-4 sm:grid-cols-6 gap-1.5 mt-1">
+                        {library.map((p) => (
+                          <button key={p.path} title={p.name}
+                            onClick={async () => {
+                              try { setSrcPhoto(await photoToDataUrl(p.url)); setPickerOpen(false); toast('Photo selected') }
+                              catch { toast('Could not load that photo') }
+                            }}
+                            className="rounded-lg overflow-hidden" style={{ aspectRatio: '4 / 3', border: '1px solid var(--color-border)' }}>
+                            <img src={p.url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <input ref={srcRef} type="file" accept="image/*" className="hidden"
                       onChange={async (e) => {
                         const f = e.target.files?.[0]
