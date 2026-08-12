@@ -49,10 +49,19 @@ const MAX_AUTO_PASSES = 2  // …but never more than this many drafts before sho
 
 /** One bay in the media strip: label + dimensions, a placeholder that shows the
  * size while rendering, the media once it exists. Nothing generates on its own. */
-function MediaSlot({ label, dim, ratio, busy, note, url, kind, action, onGen, fileName }: {
+function MediaSlot({ label, dim, ratio, busy, note, url, kind, action, onGen, fileName, expect }: {
   label: string; dim: string; ratio: string; busy: boolean; note: string
   url: string; kind: 'image' | 'video'; action: string; onGen: () => void; fileName?: string
+  expect?: string
 }) {
+  // Elapsed-seconds ticker while rendering, so a long render never looks stuck.
+  const [t, setT] = useState(0)
+  useEffect(() => {
+    if (!busy) { setT(0); return }
+    const iv = setInterval(() => setT((n) => n + 1), 1000)
+    return () => clearInterval(iv)
+  }, [busy])
+
   return (
     <div className="rounded-xl p-3 flex flex-col gap-2" style={{ border: '1px dashed var(--color-border)', background: 'var(--color-bg)' }}>
       <div className="flex items-baseline justify-between gap-2">
@@ -73,8 +82,8 @@ function MediaSlot({ label, dim, ratio, busy, note, url, kind, action, onGen, fi
           {busy ? (
             <div className="text-center px-3">
               <span className="inline-block rounded-full animate-spin mb-2" style={{ width: 20, height: 20, border: '2.5px solid var(--color-border)', borderTopColor: 'var(--color-accent)' }} />
-              <p className="text-[11px] font-semibold" style={{ color: 'var(--color-text)' }}>{note || 'Generating…'}</p>
-              <p className="text-[10px] tnum mt-0.5" style={{ color: 'var(--color-muted)' }}>{dim}</p>
+              <p className="text-[11px] font-semibold" style={{ color: 'var(--color-text)' }}>{note || 'Generating…'} <span className="tnum">{t}s</span></p>
+              <p className="text-[10px] tnum mt-0.5" style={{ color: 'var(--color-muted)' }}>{dim}{expect ? ` · usually ${expect}` : ''}</p>
             </div>
           ) : (
             <button onClick={onGen} className="text-xs font-semibold px-3 py-2 rounded-lg" style={{ color: 'var(--color-accent)', border: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
@@ -562,13 +571,13 @@ export default function WsAiStudio() {
                   <MediaSlot label="Static image" dim="1024 × 1024" ratio="1 / 1"
                     busy={imgBusy} note="" url={imgUrl} kind="image"
                     action="Generate image" onGen={() => void makeImage()}
-                    fileName={`${brand.toLowerCase()}-ai-image.png`} />
+                    fileName={`${brand.toLowerCase()}-ai-image.png`} expect="15–45s" />
                   <MediaSlot label="Moving image · 5s" dim="768 × 1280" ratio="3 / 5"
                     busy={motionBusy} note={motionNote} url={motionUrl} kind="video"
-                    action="Animate it" onGen={() => void makeClip(5)} />
+                    action="Animate it" onGen={() => void makeClip(5)} expect="1–2 min" />
                   <MediaSlot label="Video · 10s" dim="768 × 1280" ratio="3 / 5"
                     busy={vidBusy} note={vidNote} url={vidUrl} kind="video"
-                    action="Generate video" onGen={() => void makeClip(10)} />
+                    action="Generate video" onGen={() => void makeClip(10)} expect="2–4 min" />
                 </div>
               </div>
             </Card>

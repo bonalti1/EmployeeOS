@@ -14,7 +14,15 @@ async function generate(apiKey: string, model: string, prompt: string) {
   return fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, prompt: prompt.slice(0, 3800), size: '1024x1024', n: 1 }),
+    body: JSON.stringify({
+      model,
+      prompt: prompt.slice(0, 3800),
+      size: '1024x1024',
+      n: 1,
+      // gpt-image-1 renders 2-4x faster (and cheaper) below full quality —
+      // right for social drafts. dall-e-3 uses its own quality vocabulary.
+      ...(model === 'gpt-image-1' ? { quality: process.env.STUDIO_IMAGE_QUALITY || 'medium' } : {}),
+    }),
   })
 }
 
