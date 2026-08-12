@@ -399,6 +399,7 @@ export default function WsAiStudio() {
       headline: words?.headline || input.trim().slice(0, 48) || BRAND_LABEL[brand],
       subhead: words?.subhead || '',
       cta: kit.cta,
+      eyebrow: BRAND_LABEL[brand],
       template: tpl,
       aspect: imgAspect,
       primary: kit.colors?.[0],

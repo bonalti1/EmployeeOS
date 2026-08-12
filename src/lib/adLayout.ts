@@ -100,6 +100,7 @@ export async function composeFlyer(o: {
   headline: string
   subhead?: string
   cta?: string              // the ask — an ad without one is a donation
+  eyebrow?: string          // small uppercase kicker (usually the brand name)
   template?: FlyerTemplate
   aspect?: 'portrait' | 'square' | 'story'
   primary?: string          // exact brand hex — drawn, never approximated
@@ -172,97 +173,137 @@ export async function composeFlyer(o: {
     ctx.textAlign = 'left'
   }
 
+  // ---- Design-system helpers (the difference between template and agency) ---
+  const hexRgb = (hex: string) => {
+    const v = hex.replace('#', '')
+    const n = parseInt(v.length === 3 ? v.split('').map((c) => c + c).join('') : v, 16)
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }
+  }
+  /** Unify the photo with the palette: a whisper of brand tint + a soft base
+   * vignette for depth. Subtle on purpose — the house must stay honest. */
+  const gradePhoto = (x: number, y: number, w: number, h: number) => {
+    const { r, g, b } = hexRgb(primary)
+    ctx.fillStyle = `rgba(${r},${g},${b},0.07)`
+    ctx.fillRect(x, y, w, h)
+    const v = ctx.createLinearGradient(0, y + h * 0.55, 0, y + h)
+    v.addColorStop(0, 'rgba(6,10,22,0)')
+    v.addColorStop(1, 'rgba(6,10,22,0.34)')
+    ctx.fillStyle = v
+    ctx.fillRect(x, y + h * 0.55, w, h * 0.45)
+  }
+  const setTracking = (px: string) => { (ctx as unknown as { letterSpacing?: string }).letterSpacing = px }
+  /** Small uppercase kicker + short accent rule — instant editorial structure. */
+  const drawEyebrow = (x: number, y: number, color: string): number => {
+    const text = (o.eyebrow || '').toUpperCase().trim()
+    if (!text) return y - pad * 0.55
+    setTracking('5px')
+    ctx.font = sans(23)
+    ctx.fillStyle = color
+    ctx.fillText(text, x, y)
+    setTracking('0px')
+    ctx.fillStyle = accent
+    ctx.fillRect(x + 2, y + 16, 62, 5)
+    return y + 21
+  }
+
   if (tpl === 'banner') {
-    // Solid brand band up top carrying the words; the untouched photo below.
-    const bandH = Math.round(H * (o.subhead ? 0.30 : 0.24))
+    // Editorial band: eyebrow + left-aligned headline on the brand field, the
+    // untouched (lightly graded) photo below. Asymmetric, not centred.
+    const bandH = Math.round(H * (o.subhead ? 0.33 : 0.27))
     ctx.fillStyle = primary
     ctx.fillRect(0, 0, W, bandH)
     drawCover(ctx, photo, photo.naturalWidth, photo.naturalHeight, 0, bandH, W, H - bandH)
+    gradePhoto(0, bandH, W, H - bandH)
 
-    ctx.textAlign = 'center'
-    const head = fitText(ctx, o.headline, serif, W - pad * 2, 2, 118, 56)
+    ctx.textAlign = 'left'
+    let y = drawEyebrow(pad, pad + 10, 'rgba(255,255,255,0.72)') + pad * 0.72
+    const head = fitText(ctx, o.headline, serif, W - pad * 2, 2, 108, 54)
     ctx.font = serif(head.px)
     ctx.fillStyle = '#ffffff'
-    const lineH = head.px * 1.12
-    const blockH = head.lines.length * lineH + (o.subhead ? head.px * 0.72 : 0)
-    let y = (bandH - blockH) / 2 + head.px * 0.9
-    for (const l of head.lines) { ctx.fillText(l, W / 2, y); y += lineH }
+    const lineH = head.px * 1.06
+    y += head.px * 0.82
+    for (const l of head.lines) { ctx.fillText(l, pad, y); y += lineH }
     if (o.subhead) {
-      const sub = fitText(ctx, o.subhead, sans, W - pad * 2, 1, 46, 28)
+      const sub = fitText(ctx, o.subhead, sans, W - pad * 2, 1, 36, 24)
       ctx.font = sans(sub.px)
-      ctx.fillStyle = accent
-      ctx.fillText(sub.lines[0], W / 2, y + sub.px * 0.1)
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'   // never saturated colour as body text
+      ctx.fillText(sub.lines[0], pad, y - lineH + head.px * 1.02 + sub.px * 0.5)
     }
     ctx.fillStyle = accent
-    ctx.fillRect(0, bandH - 8, W, 8)
+    ctx.fillRect(0, bandH - 4, W, 4)
     stampCta(H)
     stampLogo({ yMin: bandH, yMax: H - (o.cta ? Math.round(pad * 2.6) : 0) })
   }
 
   if (tpl === 'overlay') {
-    // Full-bleed photo; words over a gradient; nothing about the house changes.
+    // Full-bleed photo; words over a brand-tinted gradient, left-aligned.
     drawCover(ctx, photo, photo.naturalWidth, photo.naturalHeight, 0, 0, W, H)
-    const gH = Math.round(H * 0.42)
-    const g = ctx.createLinearGradient(0, 0, 0, gH)
-    g.addColorStop(0, 'rgba(8,12,28,0.82)'); g.addColorStop(1, 'rgba(8,12,28,0)')
-    ctx.fillStyle = g
+    gradePhoto(0, 0, W, H)
+    const { r, g, b } = hexRgb(primary)
+    const gH = Math.round(H * 0.46)
+    const g1 = ctx.createLinearGradient(0, 0, 0, gH)
+    g1.addColorStop(0, `rgba(${Math.round(r * 0.35)},${Math.round(g * 0.35)},${Math.round(b * 0.45)},0.88)`)
+    g1.addColorStop(1, 'rgba(8,12,28,0)')
+    ctx.fillStyle = g1
     ctx.fillRect(0, 0, W, gH)
 
     ctx.textAlign = 'left'
-    const head = fitText(ctx, o.headline, serif, W - pad * 2, 3, 104, 52)
+    let y = drawEyebrow(pad, pad + 10, 'rgba(255,255,255,0.72)') + pad * 0.72
+    const head = fitText(ctx, o.headline, serif, W - pad * 2, 3, 100, 50)
     ctx.font = serif(head.px)
     ctx.fillStyle = '#ffffff'
-    const lineH = head.px * 1.1
-    let y = pad + head.px * 0.9
+    const lineH = head.px * 1.06
+    y += head.px * 0.82
     for (const l of head.lines) { ctx.fillText(l, pad, y); y += lineH }
     if (o.subhead) {
-      const sub = fitText(ctx, o.subhead, sans, W - pad * 2, 2, 42, 26)
+      const sub = fitText(ctx, o.subhead, sans, W - pad * 2.4, 2, 36, 24)
       ctx.font = sans(sub.px)
-      ctx.fillStyle = accent
-      let sy = y + sub.px * 0.3
-      for (const l of sub.lines) { ctx.fillText(l, pad, sy); sy += sub.px * 1.25 }
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'
+      let sy = y - lineH + head.px * 1.05 + sub.px * 0.5
+      for (const l of sub.lines) { ctx.fillText(l, pad, sy); sy += sub.px * 1.3 }
     }
     ctx.fillStyle = accent
-    ctx.fillRect(0, H - 10, W, 10)
-    stampCta(H - 10)
+    ctx.fillRect(0, H - 6, W, 6)
+    stampCta(H - 6)
     stampLogo({ yMin: Math.round(H * 0.5), yMax: H - (o.cta ? Math.round(pad * 2.6) : 0) })
   }
 
   if (tpl === 'frame') {
-    // Brand-colour frame, photo as the hero, words on a clean card beneath —
-    // the print-flyer look, and a white-background logo needs no keying help.
-    const frame = Math.round(W * 0.03)
+    // Gallery frame: thin brand border, graded photo, editorial card beneath.
+    const frame = Math.round(W * 0.028)
     ctx.fillStyle = primary
     ctx.fillRect(0, 0, W, H)
     const innerX = frame, innerW = W - frame * 2
-    const cardH = Math.round(H * (o.subhead ? 0.24 : 0.19))
+    const cardH = Math.round(H * (o.subhead ? 0.25 : 0.20))
     const photoH = H - frame * 2 - cardH
     drawCover(ctx, photo, photo.naturalWidth, photo.naturalHeight, innerX, frame, innerW, photoH)
+    gradePhoto(innerX, frame, innerW, photoH)
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(innerX, frame + photoH, innerW, cardH)
 
     ctx.textAlign = 'left'
     const textW = innerW - pad * 2 - (logo ? W * 0.24 : 0)
-    const head = fitText(ctx, o.headline, serif, textW, 2, 84, 44)
+    let y = frame + photoH + pad * 0.85
+    y = drawEyebrow(innerX + pad, y, '#8a93a6') + pad * 0.6
+    const head = fitText(ctx, o.headline, serif, textW, 2, 78, 40)
     ctx.font = serif(head.px)
     ctx.fillStyle = primary
-    const lineH = head.px * 1.1
-    const baseY = frame + photoH + pad * 0.9 + head.px * 0.8
-    let y = baseY
+    const lineH = head.px * 1.08
+    y += head.px * 0.8
     for (const l of head.lines) { ctx.fillText(l, innerX + pad, y); y += lineH }
     if (o.subhead) {
-      const sub = fitText(ctx, o.subhead, sans, textW, 2, 38, 24)
+      const sub = fitText(ctx, o.subhead, sans, textW, 2, 32, 22)
       ctx.font = sans(sub.px)
-      ctx.fillStyle = accent
-      ctx.fillText(sub.lines[0], innerX + pad, y + sub.px * 0.2)
+      ctx.fillStyle = '#5b6472'                  // quiet grey, not shouting red
+      ctx.fillText(sub.lines[0], innerX + pad, y - lineH + head.px * 1.02 + sub.px * 0.5)
     }
     if (logo) {
-      const lw = Math.round(W * 0.2)
+      const lw = Math.round(W * 0.19)
       const lh = Math.round((logo.height / logo.width) * lw)
       ctx.drawImage(logo, innerX + innerW - lw - pad, frame + photoH + (cardH - lh) / 2, lw, lh)
     }
     ctx.fillStyle = accent
-    ctx.fillRect(innerX, frame + photoH, innerW, 8)
+    ctx.fillRect(innerX, frame + photoH, innerW, 6)
     stampCta(frame + photoH)
   }
 
