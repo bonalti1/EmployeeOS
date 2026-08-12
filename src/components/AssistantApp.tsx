@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { IconMenu, IconHome, IconTasks, IconFilm, IconJournal } from './icons'
 import { BonaltiLogo } from './Logo'
-import { WS_SECTIONS } from './WorkspaceLayout'
+import { WS_SECTIONS, AssistantShell } from './WorkspaceLayout'
 import { useWorkspace, WORKSPACE_NAME } from '../lib/workspace'
 import { supabase } from '../lib/supabase'
 import WsHome from '../pages/workspace/WsHome'
@@ -173,7 +173,12 @@ export default function AssistantApp() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
 
+  // Close the mobile drawer whenever navigation happens (back button, a link
+  // inside a page, the bottom tabs) so it can never sit open over the content.
+  useEffect(() => { setMobileOpen(false) }, [location.pathname])
+
   return (
+    <AssistantShell value>
     <div className="flex h-full" style={{ background: 'var(--color-bg)' }}>
       <div className="hidden lg:block h-full shrink-0">
         <AssistantSidebar />
@@ -220,5 +225,6 @@ export default function AssistantApp() {
       <IdeaCapture />
       <AssistantBottomNav onMore={() => setMobileOpen(true)} />
     </div>
+    </AssistantShell>
   )
 }

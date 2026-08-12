@@ -144,6 +144,66 @@ export default function WsTasks() {
     )
   }
 
+  // One editor, rendered in the desktop side panel and the phone bottom sheet.
+  const editor = selected && (
+    <div className="flex flex-col gap-3">
+      <Input value={selected.title} onChange={(e) => patchSelected({ title: e.target.value } as Partial<WsTask>)} />
+      <div>
+        <span className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Company</span>
+        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+          {TASK_CATEGORIES.map((c) => {
+            const on = selected.category === c
+            return (
+              <button key={c} onClick={() => patchSelected({ category: c } as Partial<WsTask>)} title={c}
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 transition"
+                style={{
+                  background: on ? 'color-mix(in srgb, var(--color-accent) 12%, var(--color-surface))' : 'var(--color-bg)',
+                  border: on ? '1.5px solid var(--color-accent)' : '1px solid var(--color-border)',
+                }}>
+                <CatLogo cat={c} size={16} />
+                {c === 'Personal' && <span className="text-[11px] font-semibold" style={{ color: on ? 'var(--color-accent)' : 'var(--color-muted)' }}>Personal</span>}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Day / date
+          <input type="date" value={selected.due || ''} onChange={(e) => { const v = e.target.value || null; patchSelected({ due: v, status: selected.status === 'done' ? 'done' : selected.status === 'waiting' ? 'waiting' : scheduleStatus(v) } as Partial<WsTask>) }}
+            className="w-full rounded-xl px-2.5 py-2.5 text-sm outline-none mt-1 font-normal" style={wsField} />
+        </label>
+        <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Priority
+          <select value={selected.priority} onChange={(e) => patchSelected({ priority: e.target.value as WsTask['priority'] } as Partial<WsTask>)}
+            className="w-full rounded-xl px-2.5 py-2.5 text-sm outline-none mt-1 font-normal" style={wsField}>
+            {WS_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </label>
+        <label className="text-xs font-semibold col-span-2" style={{ color: 'var(--color-muted)' }}>Status
+          <select value={selected.status} onChange={(e) => patchSelected({ status: e.target.value as WsTask['status'], completed_at: e.target.value === 'done' ? new Date().toISOString() : null } as Partial<WsTask>)}
+            className="w-full rounded-xl px-2.5 py-2.5 text-sm outline-none mt-1 font-normal" style={wsField}>
+            {LISTS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+          </select>
+        </label>
+      </div>
+      {selected.status === 'waiting' && (
+        <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Waiting on
+          <Input value={selected.waiting_on} onChange={(e) => patchSelected({ waiting_on: e.target.value } as Partial<WsTask>)}
+            placeholder="Who or what is this blocked on?" className="mt-1 font-normal" />
+        </label>
+      )}
+      <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Notes
+        <textarea value={selected.notes} onChange={(e) => patchSelected({ notes: e.target.value } as Partial<WsTask>)}
+          rows={4} className="w-full rounded-xl px-3 py-2 text-sm outline-none mt-1 font-normal" style={wsField} />
+      </label>
+      <div className="flex justify-between items-center gap-3">
+        <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
+          Added by {selected.assigned_by === 'owner' ? 'Rolando' : ASSISTANT_NAME}
+        </span>
+        <Button onClick={() => setSelected(null)}>Done</Button>
+      </div>
+    </div>
+  )
+
   return (
     <WsShell
       title="Tasks"
@@ -219,7 +279,7 @@ export default function WsTasks() {
                     if (escRef.current) { escRef.current = false; return }
                     void addTo(iso, dayDrafts[iso] ?? ''); setDayDrafts((p) => ({ ...p, [iso]: '' })); setAddingDay(null)
                   }}
-                  placeholder={`${newCat} task…`}
+                  placeholder="Task…"
                   className="w-full rounded-lg px-2 py-1.5 text-xs outline-none mt-1.5"
                   style={wsField}
                 />
@@ -245,6 +305,8 @@ export default function WsTasks() {
             <span className="text-[11px] font-semibold uppercase tracking-[0.08em] shrink-0" style={{ color: 'var(--color-muted)' }}>Assign to</span>
             {TASK_CATEGORIES.map((c) => {
               const on = newCat === c
+              // The logo identifies the company on its own — only Personal,
+              // which has no mark, carries a text label.
               return (
                 <button key={c} onClick={() => setNewCat(c)} title={c}
                   className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 transition"
@@ -252,8 +314,8 @@ export default function WsTasks() {
                     background: on ? 'color-mix(in srgb, var(--color-accent) 12%, var(--color-surface))' : 'var(--color-bg)',
                     border: on ? '1.5px solid var(--color-accent)' : '1px solid var(--color-border)',
                   }}>
-                  <CatLogo cat={c} size={14} />
-                  <span className="text-[11px] font-semibold" style={{ color: on ? 'var(--color-accent)' : 'var(--color-muted)' }}>{c}</span>
+                  <CatLogo cat={c} size={16} />
+                  {c === 'Personal' && <span className="text-[11px] font-semibold" style={{ color: on ? 'var(--color-accent)' : 'var(--color-muted)' }}>Personal</span>}
                 </button>
               )
             })}
@@ -261,7 +323,7 @@ export default function WsTasks() {
           <div className="flex gap-2 mb-4">
             <Input value={draft} onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { void addTo(null, draft); setDraft('') } }}
-              placeholder={role === 'owner' ? `Assign a ${newCat} task to ${ASSISTANT_NAME}…` : `Add a ${newCat} task…`} />
+              placeholder={role === 'owner' ? `Assign a task to ${ASSISTANT_NAME}…` : 'Add a task…'} />
             <Button onClick={() => { void addTo(null, draft); setDraft('') }}><IconPlus width={15} height={15} /> Add</Button>
           </div>
 
@@ -301,57 +363,26 @@ export default function WsTasks() {
           )}
         </Card>
 
-        {/* Detail editor */}
-        <Card className="p-4 h-fit lg:sticky lg:top-6">
-          {!selected ? (
-            <p className="text-sm py-8 text-center" style={{ color: 'var(--color-muted)' }}>Select a task to edit its details.</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <Input value={selected.title} onChange={(e) => patchSelected({ title: e.target.value } as Partial<WsTask>)} />
-              <div className="grid grid-cols-2 gap-2">
-                <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Day / date
-                  <input type="date" value={selected.due || ''} onChange={(e) => { const v = e.target.value || null; patchSelected({ due: v, status: selected.status === 'done' ? 'done' : selected.status === 'waiting' ? 'waiting' : scheduleStatus(v) } as Partial<WsTask>) }}
-                    className="w-full rounded-xl px-2.5 py-2 text-sm outline-none mt-1 font-normal" style={wsField} />
-                </label>
-                <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Project
-                  <select value={selected.category} onChange={(e) => patchSelected({ category: e.target.value as WsTask['category'] } as Partial<WsTask>)}
-                    className="w-full rounded-xl px-2.5 py-2 text-sm outline-none mt-1 font-normal" style={wsField}>
-                    {TASK_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </label>
-                <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Priority
-                  <select value={selected.priority} onChange={(e) => patchSelected({ priority: e.target.value as WsTask['priority'] } as Partial<WsTask>)}
-                    className="w-full rounded-xl px-2.5 py-2 text-sm outline-none mt-1 font-normal" style={wsField}>
-                    {WS_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </label>
-                <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Status
-                  <select value={selected.status} onChange={(e) => patchSelected({ status: e.target.value as WsTask['status'], completed_at: e.target.value === 'done' ? new Date().toISOString() : null } as Partial<WsTask>)}
-                    className="w-full rounded-xl px-2.5 py-2 text-sm outline-none mt-1 font-normal" style={wsField}>
-                    {LISTS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
-                  </select>
-                </label>
-              </div>
-              {selected.status === 'waiting' && (
-                <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Waiting on
-                  <Input value={selected.waiting_on} onChange={(e) => patchSelected({ waiting_on: e.target.value } as Partial<WsTask>)}
-                    placeholder="Who or what is this blocked on?" className="mt-1 font-normal" />
-                </label>
-              )}
-              <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Notes
-                <textarea value={selected.notes} onChange={(e) => patchSelected({ notes: e.target.value } as Partial<WsTask>)}
-                  rows={4} className="w-full rounded-xl px-3 py-2 text-sm outline-none mt-1 font-normal" style={wsField} />
-              </label>
-              <div className="flex justify-between items-center">
-                <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
-                  Added by {selected.assigned_by === 'owner' ? 'Rolando' : ASSISTANT_NAME}
-                </span>
-                <Button variant="ghost" onClick={() => setSelected(null)}>Close</Button>
-              </div>
-            </div>
-          )}
+        {/* Detail editor — sticky side panel on desktop */}
+        <Card className="p-4 h-fit lg:sticky lg:top-6 hidden lg:block">
+          {!selected
+            ? <p className="text-sm py-8 text-center" style={{ color: 'var(--color-muted)' }}>Select a task to edit its details.</p>
+            : editor}
         </Card>
       </div>
+
+      {/* Phone: the same editor as a bottom sheet, so tapping a task never
+          scrolls you away from the list. */}
+      {selected && (
+        <div className="lg:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={() => setSelected(null)} />
+          <div className="absolute inset-x-0 bottom-0 rounded-t-3xl p-4 max-h-[88vh] overflow-y-auto"
+            style={{ background: 'var(--color-surface)', borderTop: '1px solid var(--color-border)', boxShadow: '0 -12px 40px -12px rgba(0,0,0,0.4)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}>
+            <div className="mx-auto mb-3 rounded-full" style={{ width: 40, height: 4, background: 'var(--color-border)' }} />
+            {editor}
+          </div>
+        </div>
+      )}
     </WsShell>
   )
 }

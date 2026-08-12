@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react'
+import { createContext, useContext, type CSSProperties, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { Card, PageHeader } from './ui'
 import { IconHome, IconTasks, IconFilm, IconFolder, IconBook, IconStamp, IconSpark, IconJournal, IconTrend, IconBulb, IconMegaphone } from './icons'
@@ -26,6 +26,15 @@ export const WS_SECTIONS = [
 ]
 
 export const wsField: CSSProperties = { background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }
+
+/**
+ * True while a page renders inside the Assistant shell, which already provides
+ * a sidebar (desktop) and bottom tabs (phone). The pill tab bar is redundant
+ * there, so WsShell hides it — including in the owner's "view as" preview.
+ */
+const AssistantShellCtx = createContext(false)
+export const AssistantShell = AssistantShellCtx.Provider
+export const useInAssistantShell = () => useContext(AssistantShellCtx)
 
 export function WorkspaceTabs() {
   return (
@@ -80,11 +89,12 @@ export function WsShell({ title, subtitle, action, children }: {
   title: string; subtitle?: string; action?: ReactNode; children: ReactNode
 }) {
   const { role, configured, ready, loading } = useWorkspace()
+  const inAssistantShell = useInAssistantShell()
 
   return (
     <div>
       <PageHeader title={title} subtitle={subtitle} action={action} />
-      {role !== 'assistant' && <WorkspaceTabs />}
+      {role !== 'assistant' && !inAssistantShell && <WorkspaceTabs />}
       {!configured ? (
         <Card className="p-6">
           <p className="font-semibold" style={{ color: 'var(--color-text)' }}>Cloud setup required</p>
