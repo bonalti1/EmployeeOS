@@ -398,6 +398,7 @@ export default function WsAiStudio() {
       photoUrl: srcPhoto,
       headline: words?.headline || input.trim().slice(0, 48) || BRAND_LABEL[brand],
       subhead: words?.subhead || '',
+      cta: kit.cta,
       template: tpl,
       aspect: imgAspect,
       primary: kit.colors?.[0],

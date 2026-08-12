@@ -85,10 +85,21 @@ const logoRect = (pos: LogoPos, W: number, H: number, lw: number, lh: number, pa
   y: pos.startsWith('bottom') ? H - lh - pad : pad,
 })
 
+const roundRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.arcTo(x + w, y, x + w, y + h, r)
+  ctx.arcTo(x + w, y + h, x, y + h, r)
+  ctx.arcTo(x, y + h, x, y, r)
+  ctx.arcTo(x, y, x + w, y, r)
+  ctx.closePath()
+}
+
 export async function composeFlyer(o: {
   photoUrl: string
   headline: string
   subhead?: string
+  cta?: string              // the ask — an ad without one is a donation
   template?: FlyerTemplate
   aspect?: 'portrait' | 'square' | 'story'
   primary?: string          // exact brand hex — drawn, never approximated
@@ -116,18 +127,49 @@ export async function composeFlyer(o: {
 
   const stampLogo = (region?: { yMin: number; yMax: number; onLight?: boolean }) => {
     if (!logo) return
-    const lw = Math.round(W * 0.26)
+    const lw = Math.round(W * 0.24)
     const lh = Math.round((logo.height / logo.width) * lw)
     let { x, y } = logoRect(logoPos, W, H, lw, lh, pad)
     if (region) y = Math.min(Math.max(y, region.yMin + pad * 0.6), region.yMax - lh - pad * 0.6)
     if (!region?.onLight) {
-      // soft scrim so a light mark reads over the photo
-      const g = ctx.createRadialGradient(x + lw / 2, y + lh / 2, lh * 0.2, x + lw / 2, y + lh / 2, Math.max(lw, lh))
-      g.addColorStop(0, 'rgba(0,0,0,0.38)'); g.addColorStop(1, 'rgba(0,0,0,0)')
-      ctx.fillStyle = g
-      ctx.fillRect(x - pad, y - pad, lw + pad * 2, lh + pad * 2)
+      // A clean white chip keeps any mark crisp over the photo — a navy/red
+      // logo washed out against concrete is a logo wasted.
+      const cp = Math.round(pad * 0.45)
+      ctx.save()
+      ctx.shadowColor = 'rgba(0,0,0,0.28)'
+      ctx.shadowBlur = 18
+      ctx.shadowOffsetY = 4
+      ctx.fillStyle = 'rgba(255,255,255,0.96)'
+      roundRect(ctx, x - cp, y - cp, lw + cp * 2, lh + cp * 2, Math.round(cp * 0.9))
+      ctx.fill()
+      ctx.restore()
     }
     ctx.drawImage(logo, x, y, lw, lh)
+  }
+
+  /** The ask, as an accent pill nobody can miss. Skips the logo's corner. */
+  const stampCta = (yBottom: number) => {
+    if (!o.cta) return
+    const px = 34
+    ctx.font = sans(px)
+    const tw = ctx.measureText(o.cta).width
+    const ph = Math.round(px * 2.1)
+    const pw = Math.round(tw + px * 2.2)
+    const cx = logoPos === 'bottom-center' ? pad + pw / 2 : W / 2
+    const x = Math.round(Math.min(Math.max(cx - pw / 2, pad), W - pw - pad))
+    const y = yBottom - ph - pad
+    ctx.save()
+    ctx.shadowColor = 'rgba(0,0,0,0.3)'
+    ctx.shadowBlur = 16
+    ctx.shadowOffsetY = 4
+    ctx.fillStyle = accent
+    roundRect(ctx, x, y, pw, ph, ph / 2)
+    ctx.fill()
+    ctx.restore()
+    ctx.fillStyle = '#ffffff'
+    ctx.textAlign = 'center'
+    ctx.fillText(o.cta, x + pw / 2, y + ph / 2 + px * 0.36)
+    ctx.textAlign = 'left'
   }
 
   if (tpl === 'banner') {
@@ -153,7 +195,8 @@ export async function composeFlyer(o: {
     }
     ctx.fillStyle = accent
     ctx.fillRect(0, bandH - 8, W, 8)
-    stampLogo({ yMin: bandH, yMax: H })
+    stampCta(H)
+    stampLogo({ yMin: bandH, yMax: H - (o.cta ? Math.round(pad * 2.6) : 0) })
   }
 
   if (tpl === 'overlay') {
@@ -181,7 +224,8 @@ export async function composeFlyer(o: {
     }
     ctx.fillStyle = accent
     ctx.fillRect(0, H - 10, W, 10)
-    stampLogo({ yMin: Math.round(H * 0.5), yMax: H })
+    stampCta(H - 10)
+    stampLogo({ yMin: Math.round(H * 0.5), yMax: H - (o.cta ? Math.round(pad * 2.6) : 0) })
   }
 
   if (tpl === 'frame') {
@@ -219,6 +263,7 @@ export async function composeFlyer(o: {
     }
     ctx.fillStyle = accent
     ctx.fillRect(innerX, frame + photoH, innerW, 8)
+    stampCta(frame + photoH)
   }
 
   return canvas.toDataURL('image/jpeg', 0.92)

@@ -18,6 +18,7 @@ export type BrandKit = {
   bodyFont?: string
   packageUrl?: string    // link to the full brand package / font files
   notes?: string
+  cta?: string           // the standing call to action printed on every flyer
 }
 
 export const BRAND_KEYS: BrandKey[] = ['STB', 'ALTO', 'BONALTI']

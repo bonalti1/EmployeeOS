@@ -188,6 +188,10 @@ export default function BrandKitPanel({ brand, raw, onSave, canEdit }: {
             <Input value={draft.bodyFont ?? ''} onChange={(e) => setDraft({ ...draft, bodyFont: e.target.value })}
               placeholder="e.g. Inter" className="mt-1 font-normal" />
           </label>
+          <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Call to action (printed on flyers)
+            <Input value={draft.cta ?? ''} onChange={(e) => setDraft({ ...draft, cta: e.target.value })}
+              placeholder="e.g. Text HOME to (956) 555-0123" className="mt-1 font-normal" />
+          </label>
           <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Brand package link
             <Input value={draft.packageUrl ?? ''} onChange={(e) => setDraft({ ...draft, packageUrl: e.target.value })}
               placeholder="Drive/Dropbox link with fonts & assets" className="mt-1 font-normal" />
@@ -206,6 +210,7 @@ export default function BrandKitPanel({ brand, raw, onSave, canEdit }: {
           {[
             { label: 'Heading font', value: kit.headingFont },
             { label: 'Body font', value: kit.bodyFont },
+            { label: 'Call to action', value: kit.cta },
           ].map(({ label, value }) => (
             <div key={label} className="flex items-baseline justify-between gap-3">
               <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>{label}</span>
