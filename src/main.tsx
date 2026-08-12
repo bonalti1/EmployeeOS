@@ -54,24 +54,19 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 }
 
 /**
- * Routes by workspace role after sign-in. An `assistant` member gets the
- * Assistant OS only — none of the private Personal OS routes are ever
- * mounted for them. Everyone else (Rolando, or local-only mode with no
- * Supabase) gets the Personal OS exactly as before.
+ * One site, one app: this deployment IS the Content Operating System. Whoever
+ * signs in — Carlos or Rolando — lands in the same workspace, so the URL always
+ * means the same thing and there's no "why am I looking at my own dashboard?"
+ * confusion. (Rolando's private Personal OS lives on its own site.) Owner-only
+ * controls still appear inside the workspace pages via the `role` check.
+ *
+ * `?as=personal` is a deliberate escape hatch that mounts the Personal OS tree
+ * here — kept only for local development, never linked from the UI.
  */
 function RoleRouter() {
-  const { role, loading } = useWorkspace()
-  // Owner preview: `?as=assistant` (or `?as=carlos`) renders the app EXACTLY as
-  // the assistant sees it — same shell, same sections, same shared data. The
-  // owner's dashboard uses this when embedding the workspace, so Rolando sees
-  // what Carlos sees. Sticky for the tab so in-app reloads keep the view;
-  // opening the app normally (no param, fresh tab) shows the owner view.
-  const [viewAsAssistant] = React.useState(() => {
-    try {
-      const p = new URLSearchParams(window.location.search).get('as')
-      if (p === 'assistant' || p === 'carlos') { sessionStorage.setItem('viewAs', 'assistant'); return true }
-      return sessionStorage.getItem('viewAs') === 'assistant'
-    } catch { return false }
+  const { loading } = useWorkspace()
+  const [personalOverride] = React.useState(() => {
+    try { return new URLSearchParams(window.location.search).get('as') === 'personal' } catch { return false }
   })
   if (loading) {
     return (
@@ -80,9 +75,7 @@ function RoleRouter() {
       </div>
     )
   }
-  if (role === 'assistant') return <AssistantApp />
-  if (viewAsAssistant && role === 'owner') return <AssistantApp />
-  return <App />
+  return personalOverride ? <App /> : <AssistantApp />
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
