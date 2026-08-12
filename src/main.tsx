@@ -61,6 +61,18 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
  */
 function RoleRouter() {
   const { role, loading } = useWorkspace()
+  // Owner preview: `?as=assistant` (or `?as=carlos`) renders the app EXACTLY as
+  // the assistant sees it — same shell, same sections, same shared data. The
+  // owner's dashboard uses this when embedding the workspace, so Rolando sees
+  // what Carlos sees. Sticky for the tab so in-app reloads keep the view;
+  // opening the app normally (no param, fresh tab) shows the owner view.
+  const [viewAsAssistant] = React.useState(() => {
+    try {
+      const p = new URLSearchParams(window.location.search).get('as')
+      if (p === 'assistant' || p === 'carlos') { sessionStorage.setItem('viewAs', 'assistant'); return true }
+      return sessionStorage.getItem('viewAs') === 'assistant'
+    } catch { return false }
+  })
   if (loading) {
     return (
       <div className="h-full grid place-items-center" style={{ background: 'var(--color-bg)', color: 'var(--color-muted)' }}>
@@ -68,7 +80,9 @@ function RoleRouter() {
       </div>
     )
   }
-  return role === 'assistant' ? <AssistantApp /> : <App />
+  if (role === 'assistant') return <AssistantApp />
+  if (viewAsAssistant && role === 'owner') return <AssistantApp />
+  return <App />
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
