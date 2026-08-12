@@ -61,6 +61,9 @@ export default function WsTasks() {
   const [addingDay, setAddingDay] = useState<string | null>(null)
   const [selected, setSelected] = useState<WsTask | null>(null)
   const escRef = useRef(false) // Escape cancels a day-add without saving on blur
+  // Which company/project a newly added task belongs to. Chosen with the logo
+  // picker next to the add box and reused for day-column adds.
+  const [newCat, setNewCat] = useState<WsTask['category']>('Content')
 
   const today = toISO(new Date())
   const monday = addDays(startOfWeek(new Date()), weekOff * 7)
@@ -97,7 +100,7 @@ export default function WsTasks() {
       title: t,
       due: iso,
       status: scheduleStatus(iso),
-      category: catFilter === 'All' ? 'Content' : catFilter,
+      category: newCat,
       assigned_by: role === 'owner' ? 'owner' : 'assistant',
     } as Partial<WsTask>)
   }
@@ -160,7 +163,7 @@ export default function WsTasks() {
         {/* Project filter */}
         <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {(['All', ...TASK_CATEGORIES] as const).map((c) => (
-            <button key={c} onClick={() => setCatFilter(c)}
+            <button key={c} onClick={() => { setCatFilter(c); if (c !== 'All') setNewCat(c) }}
               className="px-3 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap transition"
               style={{
                 background: catFilter === c ? 'var(--color-accent)' : 'var(--color-surface)',
@@ -216,7 +219,7 @@ export default function WsTasks() {
                     if (escRef.current) { escRef.current = false; return }
                     void addTo(iso, dayDrafts[iso] ?? ''); setDayDrafts((p) => ({ ...p, [iso]: '' })); setAddingDay(null)
                   }}
-                  placeholder="Task…"
+                  placeholder={`${newCat} task…`}
                   className="w-full rounded-lg px-2 py-1.5 text-xs outline-none mt-1.5"
                   style={wsField}
                 />
@@ -237,10 +240,28 @@ export default function WsTasks() {
           </div>
           <p className="text-xs mb-3" style={{ color: 'var(--color-muted)' }}>Every open task — check one off and it moves to Completed.</p>
 
+          {/* Company picker — every task is assigned to a project by its logo */}
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] shrink-0" style={{ color: 'var(--color-muted)' }}>Assign to</span>
+            {TASK_CATEGORIES.map((c) => {
+              const on = newCat === c
+              return (
+                <button key={c} onClick={() => setNewCat(c)} title={c}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 transition"
+                  style={{
+                    background: on ? 'color-mix(in srgb, var(--color-accent) 12%, var(--color-surface))' : 'var(--color-bg)',
+                    border: on ? '1.5px solid var(--color-accent)' : '1px solid var(--color-border)',
+                  }}>
+                  <CatLogo cat={c} size={14} />
+                  <span className="text-[11px] font-semibold" style={{ color: on ? 'var(--color-accent)' : 'var(--color-muted)' }}>{c}</span>
+                </button>
+              )
+            })}
+          </div>
           <div className="flex gap-2 mb-4">
             <Input value={draft} onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { void addTo(null, draft); setDraft('') } }}
-              placeholder={role === 'owner' ? `Assign a task to ${ASSISTANT_NAME}…` : 'Add a task…'} />
+              placeholder={role === 'owner' ? `Assign a ${newCat} task to ${ASSISTANT_NAME}…` : `Add a ${newCat} task…`} />
             <Button onClick={() => { void addTo(null, draft); setDraft('') }}><IconPlus width={15} height={15} /> Add</Button>
           </div>
 
