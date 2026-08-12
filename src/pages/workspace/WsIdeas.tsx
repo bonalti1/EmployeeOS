@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Card, Button, Input, EmptyState } from '../../components/ui'
 import { IconTrash, IconMic, IconSpark, IconCheck } from '../../components/icons'
-import { WsShell, BrandBadge, wsField } from '../../components/WorkspaceLayout'
+import { WsShell, BrandLogo, BRAND_OPTIONS, wsField } from '../../components/WorkspaceLayout'
+import { transcribeBlob } from '../../lib/transcribe'
 import { useConfirmDelete } from '../../lib/confirmDelete'
 import { useToast } from '../../lib/toast'
 import { getWsAudio, delWsAudio } from '../../lib/wsAudio'
@@ -70,15 +71,30 @@ export default function WsIdeas() {
 
   const [filter, setFilter] = useState<'active' | 'starred' | 'shipped' | 'all'>('active')
   const [category, setCategory] = useState<'All' | WsIdea['category']>('All')
+  const [brandFilter, setBrandFilter] = useState<'All' | WsIdea['brand']>('All')
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [transcribing, setTranscribing] = useState<string | null>(null)
 
   const visible = useMemo(() => (rows ?? []).filter((i) => {
     if (category !== 'All' && i.category !== category) return false
+    // "Both" belongs to every company, so it shows under any brand filter.
+    if (brandFilter !== 'All' && i.brand !== brandFilter && i.brand !== 'Both') return false
     if (filter === 'active') return i.status !== 'shipped' && i.status !== 'parked'
     if (filter === 'starred') return i.starred
     if (filter === 'shipped') return i.status === 'shipped'
     return true
-  }), [rows, filter, category])
+  }), [rows, filter, category, brandFilter])
+
+  // Fill in the words for a voice note that saved without a transcript.
+  const runTranscribe = async (idea: WsIdea) => {
+    setTranscribing(idea.id)
+    const blob = await getWsAudio(idea.id, 'ideas')
+    const text = blob ? await transcribeBlob(blob) : null
+    setTranscribing(null)
+    if (!text) { toast('Could not transcribe this recording'); return }
+    await update(idea.id, { text } as Partial<WsIdea>)
+    toast('Transcribed')
+  }
 
   const counts = useMemo(() => ({
     active: (rows ?? []).filter((i) => i.status !== 'shipped' && i.status !== 'parked').length,
@@ -163,6 +179,27 @@ export default function WsIdeas() {
             {c}
           </button>
         ))}
+        <span className="mx-1 self-center h-5 w-px shrink-0" style={{ background: 'var(--color-border)' }} />
+        {/* Company — logos only */}
+        <button onClick={() => setBrandFilter('All')}
+          className="px-3 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap transition"
+          style={{
+            background: brandFilter === 'All' ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)' : 'transparent',
+            color: brandFilter === 'All' ? 'var(--color-accent)' : 'var(--color-muted)',
+            border: '1px solid var(--color-border)',
+          }}>
+          All
+        </button>
+        {BRAND_OPTIONS.map((b) => (
+          <button key={b} onClick={() => setBrandFilter(b)} title={b}
+            className="inline-flex items-center rounded-full px-3 py-1.5 shrink-0 transition"
+            style={{
+              background: brandFilter === b ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)' : 'transparent',
+              border: brandFilter === b ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
+            }}>
+            <BrandLogo brand={b} size={15} />
+          </button>
+        ))}
       </div>
 
       {visible.length === 0 ? (
@@ -190,7 +227,18 @@ export default function WsIdeas() {
                   </button>
                 </div>
 
-                {idea.has_audio && <VoiceNote id={idea.id} />}
+                {idea.has_audio && (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <VoiceNote id={idea.id} />
+                    {/* A recording that saved without words — get them now. */}
+                    {idea.text === '(voice note)' && (
+                      <button onClick={() => void runTranscribe(idea)} disabled={transcribing === idea.id}
+                        className="text-xs font-semibold" style={{ color: 'var(--color-accent)' }}>
+                        {transcribing === idea.id ? 'Transcribing…' : 'Transcribe'}
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex items-center gap-1.5 flex-wrap mt-2">
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
@@ -201,7 +249,7 @@ export default function WsIdeas() {
                     <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
                       style={{ background: 'var(--color-bg)', color: 'var(--color-muted)' }}>{idea.category}</span>
                   )}
-                  {idea.brand !== 'Both' && <BrandBadge brand={idea.brand} />}
+                  <span className="inline-flex items-center"><BrandLogo brand={idea.brand} size={14} /></span>
                   <span className="text-[10px] ml-auto" style={{ color: 'var(--color-muted)' }}>
                     {idea.author_role === 'owner' ? 'Rolando' : ASSISTANT_NAME} · {ago(idea.created_at)}
                   </span>

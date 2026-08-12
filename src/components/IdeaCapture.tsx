@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Card, Button } from './ui'
 import { IconPlus, IconMic } from './icons'
-import { wsField } from './WorkspaceLayout'
+import { wsField, BrandLogo, BRAND_OPTIONS } from './WorkspaceLayout'
+import { transcribeBlob } from '../lib/transcribe'
 import { useRecorder, fmtDuration, RECORD_SUPPORTED } from '../lib/useRecorder'
 import { putWsAudio } from '../lib/wsAudio'
 import { useToast } from '../lib/toast'
@@ -24,6 +25,7 @@ export default function IdeaCapture() {
   const { insert, update } = useWsTable<WsIdea>('ws_ideas')
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
+  const [brand, setBrand] = useState<WsIdea['brand']>('Both')
   const [busy, setBusy] = useState(false)
   const rec = useRecorder(navigator.language || 'en-US', (phrase) =>
     setText((prev) => (prev ? prev + ' ' : '') + phrase))
@@ -44,6 +46,7 @@ export default function IdeaCapture() {
     if (rec.recording) void rec.stop()
     setOpen(false)
     setText('')
+    setBrand('Both')
     rec.reset()
   }
 
@@ -54,11 +57,18 @@ export default function IdeaCapture() {
     setBusy(true)
     const created = await insert({
       text: body || '(voice note)',
+      brand,
       author_role: role ?? 'assistant',
     } as Partial<WsIdea>)
     if (created && blob) {
       const ok = await putWsAudio(created.id, blob, 'ideas')
       if (ok) await update(created.id, { has_audio: true } as Partial<WsIdea>)
+      // The phone's live transcription is often unavailable, so when we ended
+      // up with no words, transcribe the recording on the server and fill it in.
+      if (!body) {
+        const spoken = await transcribeBlob(blob)
+        if (spoken) await update(created.id, { text: spoken } as Partial<WsIdea>)
+      }
     }
     setBusy(false)
     toast(created ? 'Idea captured' : 'Could not save — check your connection')
@@ -103,6 +113,23 @@ export default function IdeaCapture() {
                 className="w-full rounded-xl px-3 py-2.5 text-sm outline-none leading-relaxed"
                 style={wsField}
               />
+
+              {/* Which company the idea is for — logos only, one tap */}
+              <div className="flex items-center gap-2 mt-3 flex-wrap">
+                {BRAND_OPTIONS.map((b) => {
+                  const on = brand === b
+                  return (
+                    <button key={b} onClick={() => setBrand(b)} title={b}
+                      className="inline-flex items-center rounded-lg px-2.5 py-2 transition"
+                      style={{
+                        background: on ? 'color-mix(in srgb, var(--color-accent) 12%, var(--color-surface))' : 'var(--color-bg)',
+                        border: on ? '1.5px solid var(--color-accent)' : '1px solid var(--color-border)',
+                      }}>
+                      <BrandLogo brand={b} size={16} />
+                    </button>
+                  )
+                })}
+              </div>
 
               {rec.error && <p className="text-sm mt-2" style={{ color: '#dc2626' }}>{rec.error}</p>}
               {rec.url && <audio src={rec.url} controls className="w-full mt-2" style={{ height: 36 }} />}

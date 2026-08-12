@@ -32,6 +32,33 @@ export const wsField: CSSProperties = { background: 'var(--color-bg)', border: '
  * a sidebar (desktop) and bottom tabs (phone). The pill tab bar is redundant
  * there, so WsShell hides it — including in the owner's "view as" preview.
  */
+export const BRAND_OPTIONS = ['STB', 'ALTO', 'Both', 'Internal'] as const
+export type BrandKey = typeof BRAND_OPTIONS[number]
+
+/**
+ * Company mark for a brand tag. The logo identifies the company on its own, so
+ * no wording is drawn next to it; "Both" shows the two builder marks together
+ * and "Internal" uses the BONALTI wordmark (our own house work).
+ */
+export function BrandLogo({ brand, size = 16 }: { brand: BrandKey; size?: number }) {
+  const img = (src: string, alt: string, h = size) => (
+    <img src={src} alt={alt} title={alt} draggable={false}
+      style={{ height: h, width: 'auto', maxWidth: h * 3, objectFit: 'contain' }} />
+  )
+  if (brand === 'STB') return img('/logos/stb.png', 'South Texas Builders')
+  if (brand === 'ALTO') return img('/logos/alto.png', 'Alto-Pro')
+  if (brand === 'Internal') return (
+    <img src="/logos/bonalti.png" alt="Bonalti" title="Bonalti (internal)" draggable={false}
+      style={{ height: size * 0.6, width: 'auto', maxWidth: size * 4.5, objectFit: 'contain', filter: 'invert(0.75)' }} />
+  )
+  return (
+    <span className="inline-flex items-center gap-1" title="Both companies">
+      {img('/logos/stb.png', 'South Texas Builders', size * 0.85)}
+      {img('/logos/alto.png', 'Alto-Pro', size * 0.85)}
+    </span>
+  )
+}
+
 const AssistantShellCtx = createContext(false)
 export const AssistantShell = AssistantShellCtx.Provider
 export const useInAssistantShell = () => useContext(AssistantShellCtx)
