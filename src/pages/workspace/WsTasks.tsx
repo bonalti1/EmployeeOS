@@ -1,56 +1,109 @@
-import { useMemo, useState } from 'react'
-import { Card, Button, Input, EmptyState } from '../../components/ui'
+import { useRef, useState } from 'react'
+import { Card, Button, Input } from '../../components/ui'
 import { IconCheck, IconPlus, IconTrash, IconTasks } from '../../components/icons'
-import { WsShell, BrandBadge, PriorityBadge, wsField } from '../../components/WorkspaceLayout'
+import { WsShell, PriorityBadge, wsField } from '../../components/WorkspaceLayout'
 import { useConfirmDelete } from '../../lib/confirmDelete'
 import {
-  useWorkspace, useWsTable, fmtWsDate, TASK_CATEGORIES, WS_PRIORITIES, ASSISTANT_NAME, type WsTask,
+  useWorkspace, useWsTable, TASK_CATEGORIES, WS_PRIORITIES, ASSISTANT_NAME, type WsTask,
 } from '../../lib/workspace'
 
-const LISTS: { id: WsTask['status']; label: string; hint: string }[] = [
-  { id: 'inbox', label: 'Inbox', hint: 'New and unsorted — triage into Today / Upcoming.' },
-  { id: 'today', label: 'Today', hint: 'What gets done today.' },
-  { id: 'upcoming', label: 'Upcoming', hint: 'Scheduled for later.' },
-  { id: 'waiting', label: 'Waiting', hint: 'Blocked on someone or something.' },
-  { id: 'done', label: 'Completed', hint: 'Finished work.' },
+/**
+ * Weekly task planner — mirrors the Personal OS business planner: the week's
+ * days across the top (tap a day's + to schedule straight onto it) and a
+ * Master List below showing every open task with its day badge and project
+ * logo. Checking a task moves it to Completed with a timestamp. All of it is
+ * the shared ws_tasks table, so Rolando and Carlos see the same board live.
+ */
+
+const LISTS: { id: WsTask['status']; label: string }[] = [
+  { id: 'inbox', label: 'Inbox' },
+  { id: 'today', label: 'Today' },
+  { id: 'upcoming', label: 'Upcoming' },
+  { id: 'waiting', label: 'Waiting' },
+  { id: 'done', label: 'Completed' },
 ]
 
 const PRIORITY_ORDER: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
+const WDAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+// ---- Local date helpers (all local-time, YYYY-MM-DD) ----------------------
+const toISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const addDays = (d: Date, n: number) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x }
+const startOfWeek = (d: Date) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); return addDays(x, -((x.getDay() + 6) % 7)) }
+const monthShort = (d: Date) => d.toLocaleDateString(undefined, { month: 'short' })
+function isoWeek(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const dayNum = (d.getUTCDay() + 6) % 7
+  d.setUTCDate(d.getUTCDate() - dayNum + 3)
+  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4))
+  const firstDayNum = (firstThursday.getUTCDay() + 6) % 7
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3)
+  return 1 + Math.round((d.getTime() - firstThursday.getTime()) / (7 * 86400000))
+}
+
+/** Project logo for a task's category (Personal shows a quiet dot). */
+function CatLogo({ cat, size = 15 }: { cat: WsTask['category']; size?: number }) {
+  if (cat === 'STB') return <img src="/logos/stb.png" alt="STB" title="South Texas Builders" draggable={false} style={{ height: size, width: 'auto', maxWidth: size * 2.4, objectFit: 'contain' }} />
+  if (cat === 'ALTO') return <img src="/logos/alto.png" alt="ALTO" title="Alto-Pro" draggable={false} style={{ height: size, width: 'auto', maxWidth: size * 2.4, objectFit: 'contain' }} />
+  if (cat === 'Content') return <img src="/logos/bonalti.png" alt="Content" title="Content" draggable={false} style={{ height: size * 0.62, width: 'auto', maxWidth: size * 4.4, objectFit: 'contain', filter: 'invert(0.75)' }} />
+  return <span title="Personal" className="rounded-full shrink-0" style={{ width: 7, height: 7, background: 'var(--color-border)' }} />
+}
 
 export default function WsTasks() {
   const { role } = useWorkspace()
   const confirmDelete = useConfirmDelete()
   const { rows, insert, update, remove } = useWsTable<WsTask>('ws_tasks')
 
-  const [list, setList] = useState<WsTask['status']>('inbox')
+  const [weekOff, setWeekOff] = useState(0)
   const [catFilter, setCatFilter] = useState<'All' | WsTask['category']>('All')
   const [draft, setDraft] = useState('')
+  const [dayDrafts, setDayDrafts] = useState<Record<string, string>>({})
+  const [addingDay, setAddingDay] = useState<string | null>(null)
   const [selected, setSelected] = useState<WsTask | null>(null)
+  const escRef = useRef(false) // Escape cancels a day-add without saving on blur
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = {}
-    for (const t of rows ?? []) c[t.status] = (c[t.status] || 0) + 1
-    return c
-  }, [rows])
+  const today = toISO(new Date())
+  const monday = addDays(startOfWeek(new Date()), weekOff * 7)
+  const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i))
+  const weekISO = days.map(toISO)
+  const weekLabel = `${monthShort(days[0])} ${days[0].getDate()} – ${monthShort(days[6])} ${days[6].getDate()}`
 
-  const visible = (rows ?? [])
-    .filter((t) => t.status === list && (catFilter === 'All' || t.category === catFilter))
-    .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority] || (a.due || '9999').localeCompare(b.due || '9999'))
+  const all = rows ?? []
+  const open = all.filter((t) => t.status !== 'done')
+  const byCat = (t: WsTask) => catFilter === 'All' || t.category === catFilter
 
-  const add = async () => {
-    const title = draft.trim()
-    if (!title) return
+  // Master-list groups
+  const inbox = open.filter((t) => !t.due && byCat(t))
+  const thisWeek = open.filter((t) => t.due && weekISO.includes(t.due) && byCat(t))
+    .sort((a, b) => weekISO.indexOf(a.due!) - weekISO.indexOf(b.due!) || PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority])
+  const other = open.filter((t) => t.due && !weekISO.includes(t.due) && byCat(t))
+    .sort((a, b) => (a.due || '').localeCompare(b.due || ''))
+  const doneList = all.filter((t) => t.status === 'done' && byCat(t))
+    .sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || '')).slice(0, 30)
+
+  const dayBadge = (iso: string) => {
+    const i = weekISO.indexOf(iso)
+    if (i >= 0) return WDAY_SHORT[i]
+    const d = new Date(iso + 'T00:00:00')
+    return `${monthShort(d)} ${d.getDate()}`
+  }
+
+  const scheduleStatus = (iso: string | null): WsTask['status'] => (!iso ? 'inbox' : iso === today ? 'today' : 'upcoming')
+
+  const addTo = async (iso: string | null, title: string) => {
+    const t = title.trim()
+    if (!t) return
     await insert({
-      title,
-      status: list === 'done' ? 'inbox' : list,
-      category: catFilter === 'All' ? 'Personal' : catFilter,
+      title: t,
+      due: iso,
+      status: scheduleStatus(iso),
+      category: catFilter === 'All' ? 'Content' : catFilter,
       assigned_by: role === 'owner' ? 'owner' : 'assistant',
     } as Partial<WsTask>)
-    setDraft('')
   }
 
   const toggleDone = (t: WsTask) => {
-    if (t.status === 'done') void update(t.id, { status: 'inbox', completed_at: null } as Partial<WsTask>)
+    if (t.status === 'done') void update(t.id, { status: scheduleStatus(t.due), completed_at: null } as Partial<WsTask>)
     else void update(t.id, { status: 'done', completed_at: new Date().toISOString() } as Partial<WsTask>)
   }
 
@@ -60,85 +113,170 @@ export default function WsTasks() {
     void update(selected.id, values)
   }
 
+  const Row = ({ t, badge }: { t: WsTask; badge?: string }) => {
+    const done = t.status === 'done'
+    return (
+      <li className="group flex items-center gap-2.5 rounded-lg px-2 py-2"
+        style={{ background: selected?.id === t.id ? 'color-mix(in srgb, var(--color-accent) 8%, var(--color-bg))' : 'var(--color-bg)' }}>
+        <button onClick={() => toggleDone(t)} className="h-[18px] w-[18px] rounded grid place-items-center shrink-0"
+          style={{ border: '2px solid var(--color-accent)', background: done ? 'var(--color-accent)' : 'transparent' }} aria-label="Toggle done">
+          {done && <IconCheck width={11} height={11} style={{ color: 'var(--color-on-accent)' }} />}
+        </button>
+        <CatLogo cat={t.category} />
+        <button onClick={() => setSelected(t)} className="flex-1 min-w-0 text-left">
+          <span className="text-sm" style={{ color: done ? 'var(--color-muted)' : 'var(--color-text)', opacity: done ? 0.65 : 1 }}>{t.title}</span>
+          {t.status === 'waiting' && t.waiting_on && <span className="text-xs ml-1.5" style={{ color: '#d97706' }}>⏳ {t.waiting_on}</span>}
+        </button>
+        {t.priority === 'High' && !done && <PriorityBadge priority={t.priority} />}
+        {t.assigned_by === 'owner' && role === 'assistant' && !done && (
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0" style={{ background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)', color: 'var(--color-accent)' }}>From Rolando</span>
+        )}
+        {badge && <span className="text-[10px] font-bold tnum px-1.5 py-0.5 rounded-md shrink-0" style={{ background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', color: 'var(--color-accent)' }}>{badge}</span>}
+        {done && t.completed_at && <span className="text-[10px] tnum shrink-0" style={{ color: 'var(--color-muted)' }}>{new Date(t.completed_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
+        <button onClick={() => confirmDelete({ label: `“${t.title}”`, onConfirm: () => { void remove(t.id); if (selected?.id === t.id) setSelected(null) } })}
+          className="opacity-0 group-hover:opacity-60 shrink-0" style={{ color: 'var(--color-muted)' }} aria-label="Delete">
+          <IconTrash width={13} height={13} />
+        </button>
+      </li>
+    )
+  }
+
   return (
     <WsShell
       title="Tasks"
-      subtitle={role === 'owner' ? `Anything you add here is assigned to ${ASSISTANT_NAME}` : 'Everything on your plate, in one place'}
+      subtitle={role === 'owner' ? `Plan ${ASSISTANT_NAME}'s week — anything you add here is assigned to him` : 'Plan your week, then work the list'}
     >
-      {/* List switcher */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1 mb-4" style={{ scrollbarWidth: 'none' }}>
-        {LISTS.map((l) => (
-          <button key={l.id} onClick={() => setList(l.id)}
-            className="px-3 py-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap transition"
-            style={{
-              background: list === l.id ? 'var(--color-accent)' : 'var(--color-surface)',
-              color: list === l.id ? 'var(--color-on-accent)' : 'var(--color-muted)',
-              border: '1px solid var(--color-border)',
-            }}>
-            {l.label}{counts[l.id] ? ` · ${counts[l.id]}` : ''}
-          </button>
-        ))}
-        <span className="mx-1 self-center h-5 w-px shrink-0" style={{ background: 'var(--color-border)' }} />
-        {(['All', ...TASK_CATEGORIES] as const).map((c) => (
-          <button key={c} onClick={() => setCatFilter(c)}
-            className="px-3 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap transition"
-            style={{
-              background: catFilter === c ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)' : 'transparent',
-              color: catFilter === c ? 'var(--color-accent)' : 'var(--color-muted)',
-              border: '1px solid var(--color-border)',
-            }}>
-            {c}
-          </button>
-        ))}
+      {/* Week navigation */}
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <button onClick={() => setWeekOff((n) => n - 1)} className="h-8 w-8 rounded-full grid place-items-center" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }} aria-label="Previous week">‹</button>
+          <div className="text-center min-w-[150px]">
+            <div className="font-bold leading-tight" style={{ color: 'var(--color-text)' }}>Week {isoWeek(days[0])}</div>
+            <div className="text-xs" style={{ color: 'var(--color-muted)' }}>{weekLabel}</div>
+          </div>
+          <button onClick={() => setWeekOff((n) => n + 1)} className="h-8 w-8 rounded-full grid place-items-center" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }} aria-label="Next week">›</button>
+          {weekOff !== 0 && <Button variant="ghost" onClick={() => setWeekOff(0)}>Today</Button>}
+        </div>
+        {/* Project filter */}
+        <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          {(['All', ...TASK_CATEGORIES] as const).map((c) => (
+            <button key={c} onClick={() => setCatFilter(c)}
+              className="px-3 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap transition"
+              style={{
+                background: catFilter === c ? 'var(--color-accent)' : 'var(--color-surface)',
+                color: catFilter === c ? 'var(--color-on-accent)' : 'var(--color-muted)',
+                border: '1px solid var(--color-border)',
+              }}>
+              {c}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+      {/* Day columns */}
+      <div className="flex gap-3 overflow-x-auto pb-2 mb-5" style={{ scrollbarWidth: 'thin' }}>
+        {days.map((d, i) => {
+          const iso = weekISO[i]
+          const isToday = iso === today
+          const dayTasks = all.filter((t) => t.due === iso && byCat(t))
+            .sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0) || PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority])
+          return (
+            <Card key={iso} className="p-3 shrink-0 w-[168px] flex flex-col" style={isToday ? { border: '1.5px solid var(--color-accent)' } : undefined}>
+              <div className="flex items-baseline justify-between mb-2">
+                <span className="font-bold text-sm" style={{ color: isToday ? 'var(--color-accent)' : 'var(--color-text)' }}>{WDAY_SHORT[i]}</span>
+                <span className="text-xs tnum" style={{ color: 'var(--color-muted)' }}>{monthShort(d)} {d.getDate()}</span>
+              </div>
+              <ul className="flex flex-col gap-1.5 flex-1 min-h-[60px]">
+                {dayTasks.map((t) => {
+                  const done = t.status === 'done'
+                  return (
+                    <li key={t.id} className="flex items-start gap-1.5">
+                      <button onClick={() => toggleDone(t)} className="h-4 w-4 rounded grid place-items-center shrink-0 mt-0.5"
+                        style={{ border: '2px solid var(--color-accent)', background: done ? 'var(--color-accent)' : 'transparent' }} aria-label="Toggle done">
+                        {done && <IconCheck width={10} height={10} style={{ color: 'var(--color-on-accent)' }} />}
+                      </button>
+                      <button onClick={() => setSelected(t)} className="flex-1 min-w-0 text-left">
+                        <span className="text-xs leading-snug block" style={{ color: done ? 'var(--color-muted)' : 'var(--color-text)', opacity: done ? 0.6 : 1 }}>{t.title}</span>
+                        <span className="mt-0.5 inline-flex"><CatLogo cat={t.category} size={11} /></span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+              {addingDay === iso ? (
+                <input
+                  autoFocus
+                  value={dayDrafts[iso] ?? ''}
+                  onChange={(e) => setDayDrafts((p) => ({ ...p, [iso]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { void addTo(iso, dayDrafts[iso] ?? ''); setDayDrafts((p) => ({ ...p, [iso]: '' })) }
+                    if (e.key === 'Escape') { escRef.current = true; setDayDrafts((p) => ({ ...p, [iso]: '' })); setAddingDay(null) }
+                  }}
+                  onBlur={() => {
+                    if (escRef.current) { escRef.current = false; return }
+                    void addTo(iso, dayDrafts[iso] ?? ''); setDayDrafts((p) => ({ ...p, [iso]: '' })); setAddingDay(null)
+                  }}
+                  placeholder="Task…"
+                  className="w-full rounded-lg px-2 py-1.5 text-xs outline-none mt-1.5"
+                  style={wsField}
+                />
+              ) : (
+                <button onClick={() => setAddingDay(iso)} className="text-xs font-semibold text-left mt-1.5" style={{ color: 'var(--color-accent)' }}>+ Add</button>
+              )}
+            </Card>
+          )
+        })}
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[1fr_340px] items-start">
+        {/* Master List */}
         <Card className="p-4">
-          <p className="text-xs mb-3" style={{ color: 'var(--color-muted)' }}>{LISTS.find((l) => l.id === list)?.hint}</p>
-          {list !== 'done' && (
-            <div className="flex gap-2 mb-3">
-              <Input value={draft} onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') void add() }}
-                placeholder={role === 'owner' ? `Assign a task to ${ASSISTANT_NAME} (goes to ${list})…` : `Add a task to ${list}…`} />
-              <Button onClick={() => void add()}><IconPlus width={15} height={15} /> Add</Button>
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="font-bold" style={{ color: 'var(--color-text)' }}>Master List</h3>
+            <span className="text-xs tnum" style={{ color: 'var(--color-muted)' }}>{inbox.length + thisWeek.length + other.length} open</span>
+          </div>
+          <p className="text-xs mb-3" style={{ color: 'var(--color-muted)' }}>Every open task — check one off and it moves to Completed.</p>
+
+          <div className="flex gap-2 mb-4">
+            <Input value={draft} onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { void addTo(null, draft); setDraft('') } }}
+              placeholder={role === 'owner' ? `Assign a task to ${ASSISTANT_NAME}…` : 'Add a task…'} />
+            <Button onClick={() => { void addTo(null, draft); setDraft('') }}><IconPlus width={15} height={15} /> Add</Button>
+          </div>
+
+          {inbox.length === 0 && thisWeek.length === 0 && other.length === 0 && doneList.length === 0 && (
+            <div className="py-8 text-center" style={{ color: 'var(--color-muted)' }}>
+              <IconTasks width={30} height={30} style={{ margin: '0 auto 8px' }} />
+              <p className="text-sm">Nothing here yet — add a task above or on a day.</p>
             </div>
           )}
-          {visible.length === 0 ? (
-            <EmptyState icon={<IconTasks width={34} height={34} />} title={`Nothing in ${LISTS.find((l) => l.id === list)?.label}`} />
-          ) : (
-            <ul className="flex flex-col gap-1.5">
-              {visible.map((t) => (
-                <li key={t.id} className="group flex items-start gap-2 rounded-lg px-2 py-2"
-                  style={{ background: selected?.id === t.id ? 'color-mix(in srgb, var(--color-accent) 8%, var(--color-bg))' : 'var(--color-bg)' }}>
-                  <button onClick={() => toggleDone(t)} className="h-4 w-4 rounded grid place-items-center shrink-0 mt-0.5"
-                    style={{ border: '2px solid var(--color-accent)', background: t.status === 'done' ? 'var(--color-accent)' : 'transparent' }} aria-label="Toggle done">
-                    {t.status === 'done' && <IconCheck width={11} height={11} style={{ color: 'var(--color-on-accent)' }} />}
-                  </button>
-                  <button onClick={() => setSelected(t)} className="flex-1 min-w-0 text-left">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-sm" style={{ color: 'var(--color-text)', textDecoration: t.status === 'done' ? 'line-through' : 'none', opacity: t.status === 'done' ? 0.5 : 1 }}>{t.title}</span>
-                      {t.category !== 'Personal' && <BrandBadge brand={t.category} />}
-                      <PriorityBadge priority={t.priority} />
-                      {t.assigned_by === 'owner' && role === 'assistant' && (
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0"
-                          style={{ background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)', color: 'var(--color-accent)' }}>From Rolando</span>
-                      )}
-                    </div>
-                    {(t.notes || (t.status === 'waiting' && t.waiting_on)) && (
-                      <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--color-muted)' }}>
-                        {t.status === 'waiting' && t.waiting_on ? `Waiting on: ${t.waiting_on}` : t.notes}
-                      </p>
-                    )}
-                  </button>
-                  {t.due && <span className="text-[10px] font-semibold tnum shrink-0 mt-1" style={{ color: 'var(--color-accent)' }}>{fmtWsDate(t.due)}</span>}
-                  <button
-                    onClick={() => confirmDelete({ label: `“${t.title}”`, onConfirm: () => { void remove(t.id); if (selected?.id === t.id) setSelected(null) } })}
-                    className="opacity-0 group-hover:opacity-60 shrink-0 mt-1" style={{ color: 'var(--color-muted)' }} aria-label="Delete">
-                    <IconTrash width={13} height={13} />
-                  </button>
-                </li>
-              ))}
-            </ul>
+
+          {inbox.length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-[11px] font-bold uppercase tracking-[0.1em] mb-1.5" style={{ color: 'var(--color-muted)' }}>Inbox — pick a day</h4>
+              <ul className="flex flex-col gap-1.5">{inbox.map((t) => <Row key={t.id} t={t} />)}</ul>
+            </div>
+          )}
+
+          {thisWeek.length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-[11px] font-bold uppercase tracking-[0.1em] mb-1.5" style={{ color: 'var(--color-muted)' }}>This week</h4>
+              <ul className="flex flex-col gap-1.5">{thisWeek.map((t) => <Row key={t.id} t={t} badge={dayBadge(t.due!)} />)}</ul>
+            </div>
+          )}
+
+          {other.length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-[11px] font-bold uppercase tracking-[0.1em] mb-1.5" style={{ color: 'var(--color-muted)' }}>Other dates</h4>
+              <ul className="flex flex-col gap-1.5">{other.map((t) => <Row key={t.id} t={t} badge={dayBadge(t.due!)} />)}</ul>
+            </div>
+          )}
+
+          {doneList.length > 0 && (
+            <div>
+              <h4 className="text-[11px] font-bold uppercase tracking-[0.1em] mb-1.5" style={{ color: 'var(--color-muted)' }}>Completed</h4>
+              <ul className="flex flex-col gap-1.5">{doneList.map((t) => <Row key={t.id} t={t} />)}</ul>
+            </div>
           )}
         </Card>
 
@@ -150,13 +288,11 @@ export default function WsTasks() {
             <div className="flex flex-col gap-3">
               <Input value={selected.title} onChange={(e) => patchSelected({ title: e.target.value } as Partial<WsTask>)} />
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Status
-                  <select value={selected.status} onChange={(e) => patchSelected({ status: e.target.value as WsTask['status'] } as Partial<WsTask>)}
-                    className="w-full rounded-xl px-2.5 py-2 text-sm outline-none mt-1 font-normal" style={wsField}>
-                    {LISTS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
-                  </select>
+                <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Day / date
+                  <input type="date" value={selected.due || ''} onChange={(e) => { const v = e.target.value || null; patchSelected({ due: v, status: selected.status === 'done' ? 'done' : selected.status === 'waiting' ? 'waiting' : scheduleStatus(v) } as Partial<WsTask>) }}
+                    className="w-full rounded-xl px-2.5 py-2 text-sm outline-none mt-1 font-normal" style={wsField} />
                 </label>
-                <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Category
+                <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Project
                   <select value={selected.category} onChange={(e) => patchSelected({ category: e.target.value as WsTask['category'] } as Partial<WsTask>)}
                     className="w-full rounded-xl px-2.5 py-2 text-sm outline-none mt-1 font-normal" style={wsField}>
                     {TASK_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -168,9 +304,11 @@ export default function WsTasks() {
                     {WS_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </label>
-                <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Due date
-                  <input type="date" value={selected.due || ''} onChange={(e) => patchSelected({ due: e.target.value || null } as Partial<WsTask>)}
-                    className="w-full rounded-xl px-2.5 py-2 text-sm outline-none mt-1 font-normal" style={wsField} />
+                <label className="text-xs font-semibold" style={{ color: 'var(--color-muted)' }}>Status
+                  <select value={selected.status} onChange={(e) => patchSelected({ status: e.target.value as WsTask['status'], completed_at: e.target.value === 'done' ? new Date().toISOString() : null } as Partial<WsTask>)}
+                    className="w-full rounded-xl px-2.5 py-2 text-sm outline-none mt-1 font-normal" style={wsField}>
+                    {LISTS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+                  </select>
                 </label>
               </div>
               {selected.status === 'waiting' && (
