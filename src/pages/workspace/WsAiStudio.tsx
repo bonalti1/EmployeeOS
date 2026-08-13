@@ -56,6 +56,34 @@ type ImgStyle = 'hero' | 'ugc' | 'bold' | 'beforeafter' | 'closeup'
 type ImgAspect = 'portrait' | 'square' | 'story'
 type ImageBrief = { prompt: string; headline: string; subhead: string; rationale: string }
 
+/** What to do with a real project photo:
+ *  design — gpt-image-1 typesets the WHOLE flyer itself (the ChatGPT look),
+ *           with input_fidelity keeping the photo pixel-faithful. Best quality.
+ *  real   — the flyer is drawn locally around the untouched photo. Instant, free.
+ *  ai     — the model restyles the shot (grade, light, framing). */
+type PhotoMode = 'design' | 'real' | 'ai'
+
+/** The ChatGPT-style whole-flyer prompt. The model designs and typesets the
+ * entire layout — this is why ChatGPT flyers look designed rather than
+ * assembled: the typography is rendered natively into the image. */
+const flyerDesignPrompt = (o: {
+  brandLabel: string; headline: string; subhead?: string; cta?: string
+  colors?: string[]; headingFont?: string; logoPos: LogoPos
+}) => [
+  `Design a premium ${o.brandLabel} marketing flyer using the supplied photograph as the hero image.`,
+  'CRITICAL: the photographed building must stay EXACTLY as shot — same architecture, materials, colours, windows, landscaping. Do not repaint, rebuild or re-imagine any part of the photo. The layout, crop, colour bands, panels and typography are yours to design; the house is not.',
+  'Set this copy in clean, modern typography — large, perfectly spelled, legible on a phone:',
+  `HEADLINE: "${o.headline}"`,
+  o.subhead ? `SUPPORTING LINE: "${o.subhead}"` : '',
+  o.cta ? `CALL TO ACTION: "${o.cta}" — styled as a button or pill.` : '',
+  o.colors?.length
+    ? `Use EXACTLY these brand colours for bands, panels, buttons and accents: ${o.colors.slice(0, 3).join(', ')}. No other saturated colours.`
+    : '',
+  o.headingFont ? `The headline typeface should feel like ${o.headingFont}.` : '',
+  `Leave a clean, uncluttered area at the ${o.logoPos.replace(/-/g, ' ')} of the layout for the company logo — do NOT draw any logo, wordmark or brand icon yourself.`,
+  'Art direction: top-agency, Fortune-500 grade. Strong grid, generous margins, clear hierarchy, one dominant focal point, high contrast between text and its background. No people, no watermarks, no fake badges or awards, no gibberish or duplicated letters.',
+].filter(Boolean).join('\n')
+
 const IMG_STYLES: { id: ImgStyle; label: string; hint: string }[] = [
   { id: 'hero', label: 'Hero shot', hint: 'The finished build, low angle, golden hour — magazine grade' },
   { id: 'bold', label: 'Bold poster', hint: 'The work on a brand-colour field, headline-forward' },
@@ -222,7 +250,7 @@ export default function WsAiStudio() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [brandLogo, setBrandLogo] = useState(true)   // stamp the real logo on the finished ad
   const [rawImg, setRawImg] = useState('')           // pre-branding render, for restamping
-  const [keepReal, setKeepReal] = useState(true)     // photo stays pixel-real; design composed around it
+  const [photoMode, setPhotoMode] = useState<PhotoMode>('design')  // what to do with a real photo
   const [template, setTemplate] = useState<FlyerTemplate>('banner')
   const [logoPos, setLogoPos] = useState<LogoPos>('bottom-right')
   const [imgAspect, setImgAspect] = useState<ImgAspect>('portrait')
@@ -415,9 +443,9 @@ export default function WsAiStudio() {
     const source = (result || input).trim()
     if (!source) { toast('Write the idea (or generate the script) first'); return '' }
 
-    // Real-photo flyer: the house stays exactly as photographed; AI writes the
+    // Instant flyer: the house stays exactly as photographed; AI writes the
     // words, the design is drawn locally with the exact brand colours.
-    if (srcPhoto && keepReal) {
+    if (srcPhoto && photoMode === 'real') {
       setImgBusy(true); setImgNote('Writing the headline…')
       const words = await ensureWords(regenerate)
       setImgNote('Designing your flyer…')
@@ -431,6 +459,39 @@ export default function WsAiStudio() {
         toast('Could not compose the flyer — try another photo')
         return ''
       }
+    }
+
+    // AI-designed flyer: the model typesets the ENTIRE layout itself — the
+    // same mechanism behind ChatGPT's flyers — while input_fidelity on the
+    // edits endpoint keeps the photographed house pixel-faithful.
+    if (srcPhoto && photoMode === 'design') {
+      setImgBusy(true); setImgNote('Writing the copy…')
+      const words = await ensureWords(regenerate)
+      const kit = parseKit(settings[kitKey(brand)])
+      const prompt = flyerDesignPrompt({
+        brandLabel: BRAND_LABEL[brand],
+        headline: words?.headline || input.trim().slice(0, 48) || BRAND_LABEL[brand],
+        subhead: words?.subhead,
+        cta: kit.cta,
+        colors: kit.colors,
+        headingFont: kit.headingFont,
+        logoPos,
+      })
+      setImgNote('Designing the flyer…')
+      const r = await post('studio-image', {
+        prompt, aspect: imgAspect, quality: hd ? 'high' : 'medium', sourcePhoto: srcPhoto,
+      })
+      const url = String(r.dataUrl || r.url || '')
+      if (!url) {
+        setImgBusy(false); setImgNote('')
+        toast(r.error === 'not_configured' ? String(r.message) : `Flyer failed: ${r.detail || r.error || 'try again'}`)
+        return ''
+      }
+      setRawImg(url)
+      const final = await brandStamp(url)
+      setImgBusy(false); setImgNote('')
+      setImgUrl(final)
+      return final
     }
 
     setImgBusy(true); setImgNote('Art-directing the shot…')
@@ -488,12 +549,16 @@ export default function WsAiStudio() {
     try {
       setImgNote('Applying your logo…')
       const clean = (await logoWithAlpha(kit.logo)).toDataURL('image/png')
+      // A designed flyer already carries its own layout — stamp the mark
+      // quietly into the space the prompt reserved; no scrim, no accent bar.
+      const designed = srcPhoto !== '' && photoMode === 'design'
       return await composeAd({
         imageUrl: url,
         logoUrl: clean,
         placement: pos,
-        logoScale: 0.28,
-        accentColor: kit.colors?.[0],
+        logoScale: designed ? 0.24 : 0.28,
+        accentColor: designed ? undefined : kit.colors?.[0],
+        scrim: !designed,
       })
     } catch { return url }
   }
@@ -504,7 +569,7 @@ export default function WsAiStudio() {
     const pos = opts?.pos ?? logoPos
     const tpl = opts?.tpl ?? template
     if (!imgUrl) return
-    if (srcPhoto && keepReal) setImgUrl(await composeReal(brief, on, pos, tpl))
+    if (srcPhoto && photoMode === 'real') setImgUrl(await composeReal(brief, on, pos, tpl))
     else if (rawImg) setImgUrl(on ? await brandStamp(rawImg, true, pos) : rawImg)
     setImgNote('')
   }
@@ -857,24 +922,33 @@ export default function WsAiStudio() {
                       )}
                     </div>
 
-                    {/* With a real photo, choose: keep it untouched (flyer is
-                        composed around it — instant, free) or let AI restyle. */}
+                    {/* With a real photo, choose how the flyer gets made. */}
                     {srcPhoto && (
                       <div className="w-full flex gap-1.5 flex-wrap items-center mt-1">
-                        {([['real', '📷 Photo stays real'], ['ai', '✨ AI restyle']] as const).map(([m, label]) => (
-                          <button key={m} onClick={() => { setKeepReal(m === 'real') }}
+                        {([
+                          ['design', '🎨 Designed flyer'],
+                          ['real', '⚡ Instant flyer'],
+                          ['ai', '✨ AI restyle'],
+                        ] as const).map(([m, label]) => (
+                          <button key={m} onClick={() => { setPhotoMode(m) }}
                             className="px-2.5 py-1.5 rounded-full text-[11px] font-bold transition"
                             style={{
-                              background: (m === 'real') === keepReal ? 'var(--color-accent)' : 'var(--color-surface)',
-                              color: (m === 'real') === keepReal ? 'var(--color-on-accent)' : 'var(--color-muted)',
+                              background: photoMode === m ? 'var(--color-accent)' : 'var(--color-surface)',
+                              color: photoMode === m ? 'var(--color-on-accent)' : 'var(--color-muted)',
                               border: '1px solid var(--color-border)',
                             }}>
                             {label}
                           </button>
                         ))}
-                        {keepReal && (
+                        <span className="w-full text-[10px] -mt-0.5" style={{ color: 'var(--color-muted)' }}>
+                          {photoMode === 'design'
+                            ? 'The AI designs and typesets the whole layout — magazine-grade type, your photo untouched. ~1 min per render.'
+                            : photoMode === 'real'
+                              ? 'Drawn locally around the untouched photo — instant, no AI image cost.'
+                              : 'The AI regrades and reframes the shot itself, then the design is stamped on.'}
+                        </span>
+                        {photoMode === 'real' && (
                           <>
-                            <span className="h-4 w-px" style={{ background: 'var(--color-border)' }} />
                             {([['banner', 'Banner'], ['overlay', 'Overlay'], ['frame', 'Frame']] as const).map(([t, label]) => (
                               <button key={t} onClick={() => { setTemplate(t); void rebrand({ tpl: t }) }}
                                 className="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition"
@@ -886,7 +960,6 @@ export default function WsAiStudio() {
                                 {label}
                               </button>
                             ))}
-                            <span className="text-[10px]" style={{ color: 'var(--color-muted)' }}>instant · no AI image cost</span>
                           </>
                         )}
                       </div>
@@ -926,7 +999,10 @@ export default function WsAiStudio() {
                     ratio={IMG_ASPECTS.find((a) => a.id === imgAspect)!.ratio}
                     busy={imgBusy} note={imgNote} url={imgUrl} kind="image"
                     action="Generate creative" onGen={() => void makeImage(!!imgUrl)}
-                    fileName={`${brand.toLowerCase()}-ad.png`} expectSec={hd ? 55 : 25} />
+                    fileName={`${brand.toLowerCase()}-ad.png`}
+                    expectSec={srcPhoto && photoMode === 'real' ? 8
+                      : srcPhoto && photoMode === 'design' ? (hd ? 90 : 60)
+                        : hd ? 55 : 25} />
                   <div className="grid grid-cols-2 lg:grid-cols-1 gap-3">
                     <MediaSlot icon="✨" label="Moving image · 5s" dim="768 × 1280" ratio="3 / 5"
                       busy={motionBusy} note={motionNote} url={motionUrl} kind="video"

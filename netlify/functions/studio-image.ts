@@ -43,7 +43,7 @@ async function generate(apiKey: string, model: string, prompt: string, size: str
  * applies the art direction — grade, crop, headline — around it. This is what
  * makes a creative believable to a local audience.
  */
-async function editFromPhoto(apiKey: string, prompt: string, size: string, quality: string, dataUrl: string) {
+async function editFromPhoto(apiKey: string, prompt: string, size: string, quality: string, dataUrl: string, fidelity = true) {
   const [, mime = 'image/png', b64 = ''] = dataUrl.match(/^data:([^;]+);base64,(.*)$/) || []
   const bin = atob(b64)
   const bytes = new Uint8Array(bin.length)
@@ -56,6 +56,10 @@ async function editFromPhoto(apiKey: string, prompt: string, size: string, quali
   form.append('prompt', prompt.slice(0, 3800))
   form.append('size', size)
   form.append('quality', quality)
+  // Without this the model treats the photo as loose inspiration and repaints
+  // the house. High fidelity keeps the photographed subject pixel-faithful
+  // while the design is rendered around it — the ChatGPT-flyer behaviour.
+  if (fidelity) form.append('input_fidelity', 'high')
   form.append('n', '1')
 
   return fetch('https://api.openai.com/v1/images/edits', {
@@ -82,7 +86,17 @@ export default async (req: Request): Promise<Response> => {
   try {
     // A real project photo always wins over an invented scene.
     if (p.sourcePhoto?.startsWith('data:')) {
-      const edit = await editFromPhoto(apiKey, prompt, size, quality, p.sourcePhoto)
+      let edit = await editFromPhoto(apiKey, prompt, size, quality, p.sourcePhoto)
+      if (!edit.ok) {
+        // Accounts on an older API surface reject input_fidelity — retry
+        // without it rather than failing the whole render.
+        const firstFail = await edit.text().catch(() => '')
+        if (firstFail.includes('input_fidelity')) {
+          edit = await editFromPhoto(apiKey, prompt, size, quality, p.sourcePhoto, false)
+        } else {
+          return json({ error: 'edit_failed', detail: firstFail.slice(0, 300) }, 200)
+        }
+      }
       if (edit.ok) {
         const data = (await edit.json()) as { data?: { b64_json?: string; url?: string }[] }
         const first = data.data?.[0]
