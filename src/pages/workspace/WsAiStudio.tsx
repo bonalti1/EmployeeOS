@@ -69,20 +69,34 @@ type PhotoMode = 'design' | 'real' | 'ai'
 const flyerDesignPrompt = (o: {
   brandLabel: string; headline: string; subhead?: string; cta?: string
   colors?: string[]; headingFont?: string; logoPos: LogoPos
-}) => [
-  `Design a premium ${o.brandLabel} marketing flyer using the supplied photograph as the hero image.`,
-  'CRITICAL: the photographed building must stay EXACTLY as shot — same architecture, materials, colours, windows, landscaping. Do not repaint, rebuild or re-imagine any part of the photo. The layout, crop, colour bands, panels and typography are yours to design; the house is not.',
-  'Set this copy in clean, modern typography — large, perfectly spelled, legible on a phone:',
-  `HEADLINE: "${o.headline}"`,
-  o.subhead ? `SUPPORTING LINE: "${o.subhead}"` : '',
-  o.cta ? `CALL TO ACTION: "${o.cta}" — styled as a button or pill.` : '',
-  o.colors?.length
-    ? `Use EXACTLY these brand colours for bands, panels, buttons and accents: ${o.colors.slice(0, 3).join(', ')}. No other saturated colours.`
-    : '',
-  o.headingFont ? `The headline typeface should feel like ${o.headingFont}.` : '',
-  `Leave a clean, uncluttered area at the ${o.logoPos.replace(/-/g, ' ')} of the layout for the company logo — do NOT draw any logo, wordmark or brand icon yourself.`,
-  'Art direction: top-agency, Fortune-500 grade. Strong grid, generous margins, clear hierarchy, one dominant focal point, high contrast between text and its background. No people, no watermarks, no fake badges or awards, no gibberish or duplicated letters.',
-].filter(Boolean).join('\n')
+}) => {
+  const corner = o.logoPos.replace(/-/g, ' ')
+  return [
+    `Design a premium ${o.brandLabel} marketing flyer using the supplied photograph as the hero image.`,
+
+    'THE PHOTOGRAPH IS THE HERO. It must fill at least 60% of the canvas — a large, uncropped, dominant image, not a thin strip between coloured bars. Everything else is supporting.',
+
+    'CRITICAL: the photographed building must stay EXACTLY as shot — same architecture, materials, colours, windows, roofline, landscaping. Do not repaint, rebuild or re-imagine any part of the photo. The layout and typography are yours to design; the house is not.',
+
+    'Set this copy in clean, modern typography — large, perfectly spelled, legible on a phone:',
+    `HEADLINE: "${o.headline}"`,
+    o.subhead ? `SUPPORTING LINE: "${o.subhead}"` : '',
+    o.cta
+      ? `CALL TO ACTION (must appear, styled as a solid button or pill): "${o.cta}"`
+      : 'CALL TO ACTION: end with a clear, simple ask styled as a solid button — e.g. "Send us a message".',
+
+    'DO NOT WRITE THE COMPANY NAME ANYWHERE. No wordmark, no logo, no monogram, no brand icon, no "builders" lockup — none. The real logo file is composited on afterwards, and a drawn one collides with it.',
+    `Instead, leave a clean, EMPTY, LIGHT-COLOURED area at the ${corner} — roughly a quarter of the width and free of text, texture and dark panels — reserved for that logo.`,
+
+    o.colors?.length
+      ? `Brand colours — use ONLY these, and use the first as the dominant one: ${o.colors.slice(0, 3).join(', ')}. Every panel, band and button must be one of these exact colours. No orange, no teal, no invented accent colours.`
+      : '',
+    o.headingFont ? `The headline typeface should feel like ${o.headingFont}.` : '',
+
+    'Layout discipline: at most TWO solid colour areas total — do not stack the flyer into horizontal stripes. Generous margins, one clear focal point, strong contrast between text and its background, and real breathing room around the type.',
+    'Art direction: top-agency, Fortune-500 grade — the kind of flyer a national homebuilder would run. No people, no watermarks, no fake badges, awards or star ratings, no gibberish or duplicated letters, no stock-photo collage.',
+  ].filter(Boolean).join('\n')
+}
 
 const IMG_STYLES: { id: ImgStyle; label: string; hint: string }[] = [
   { id: 'hero', label: 'Hero shot', hint: 'The finished build, low angle, golden hour — magazine grade' },
@@ -556,9 +570,10 @@ export default function WsAiStudio() {
         imageUrl: url,
         logoUrl: clean,
         placement: pos,
-        logoScale: designed ? 0.24 : 0.28,
+        logoScale: designed ? 0.22 : 0.28,
         accentColor: designed ? undefined : kit.colors?.[0],
         scrim: !designed,
+        autoCard: designed,   // a navy mark on a navy footer needs a white card
       })
     } catch { return url }
   }
@@ -947,6 +962,11 @@ export default function WsAiStudio() {
                               ? 'Drawn locally around the untouched photo — instant, no AI image cost.'
                               : 'The AI regrades and reframes the shot itself, then the design is stamped on.'}
                         </span>
+                        {!parseKit(settings[kitKey(brand)]).cta && (
+                          <span className="w-full text-[10px] font-semibold" style={{ color: '#d97706' }}>
+                            ⚠ No call to action set — add one in the Brand kit (e.g. “Send us a message”) so every flyer ends with an ask.
+                          </span>
+                        )}
                         {photoMode === 'real' && (
                           <>
                             {([['banner', 'Banner'], ['overlay', 'Overlay'], ['frame', 'Frame']] as const).map(([t, label]) => (
