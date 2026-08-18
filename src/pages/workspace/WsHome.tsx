@@ -11,6 +11,26 @@ import { PROMPTS } from './WsJournal'
 
 const PRIORITY_ORDER: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
 
+/** One non-negotiable. Identical in both lists — whose it is shows in the
+ * heading above it, not in how the row looks, because they carry equal weight
+ * once the day starts. Only a removable row shows the ✕. */
+function NnRow({ item, done, onToggle, onRemove }: {
+  item: string; done: boolean; onToggle: () => void; onRemove?: () => void
+}) {
+  return (
+    <li className="flex items-center gap-2.5 rounded-lg px-2 py-1.5" style={{ background: 'var(--color-bg)' }}>
+      <button onClick={onToggle} className="h-4 w-4 rounded grid place-items-center shrink-0"
+        style={{ border: '2px solid var(--color-accent)', background: done ? 'var(--color-accent)' : 'transparent' }} aria-label="Toggle">
+        {done && <IconCheck width={11} height={11} style={{ color: 'var(--color-on-accent)' }} />}
+      </button>
+      <span className="text-sm" style={{ color: 'var(--color-text)', textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.5 : 1 }}>{item}</span>
+      {onRemove && (
+        <button onClick={onRemove} className="ml-auto text-xs shrink-0" style={{ color: 'var(--color-muted)' }} aria-label="Remove">✕</button>
+      )}
+    </li>
+  )
+}
+
 /** Time-of-day greeting, same voice as the Personal OS home. */
 function greeting(): string {
   const h = new Date().getHours()
@@ -42,16 +62,39 @@ export default function WsHome() {
   const [msgDraft, setMsgDraft] = useState('')
   const [editingNN, setEditingNN] = useState(false)
   const [nnDraft, setNnDraft] = useState('')
+  const [ownDraft, setOwnDraft] = useState('')
 
   const today = wsTodayISO()
-  const nnList = useMemo(() => (settings['nn_list'] || '').split('\n').map((s) => s.trim()).filter(Boolean), [settings])
-  const nnDone = useMemo<number[]>(() => {
-    try { return JSON.parse(settings[`nn_done_${today}`] || '[]') } catch { return [] }
+  const splitList = (raw: string) => raw.split('\n').map((s) => s.trim()).filter(Boolean)
+  // Two lists, deliberately kept in separate settings keys: `nn_list` is the
+  // owner's and is owner-write-only in RLS, `nn_list_assistant` is the
+  // assistant's own. See supabase/06_non_negotiables.sql.
+  const nnList = useMemo(() => splitList(settings['nn_list'] || ''), [settings])
+  const ownList = useMemo(() => splitList(settings['nn_list_assistant'] || ''), [settings])
+
+  // Ticks are keyed 'o:<i>' / 'a:<i>' so the two lists cannot collide. Older
+  // days stored bare indices, which always meant the owner's list.
+  const nnDone = useMemo<string[]>(() => {
+    try {
+      const raw: unknown = JSON.parse(settings[`nn_done_${today}`] || '[]')
+      return Array.isArray(raw) ? raw.map((v) => (typeof v === 'number' ? `o:${v}` : String(v))) : []
+    } catch { return [] }
   }, [settings, today])
 
-  const toggleNN = (i: number) => {
-    const next = nnDone.includes(i) ? nnDone.filter((x) => x !== i) : [...nnDone, i]
+  const toggleNN = (id: string) => {
+    const next = nnDone.includes(id) ? nnDone.filter((x) => x !== id) : [...nnDone, id]
     void set(`nn_done_${today}`, JSON.stringify(next))
+  }
+
+  /** The assistant's own list — theirs to add to and theirs to drop. */
+  const addOwn = async () => {
+    const t = ownDraft.trim()
+    if (!t) return
+    await set('nn_list_assistant', [...ownList, t].join('\n'))
+    setOwnDraft('')
+  }
+  const removeOwn = async (i: number) => {
+    await set('nn_list_assistant', ownList.filter((_, n) => n !== i).join('\n'))
   }
 
   const todayTasks = (tasks.rows ?? [])
@@ -120,23 +163,58 @@ export default function WsHome() {
                 placeholder="One non-negotiable per line" />
               <Button className="mt-2" onClick={async () => { await set('nn_list', nnDraft); setEditingNN(false) }}>Save</Button>
             </div>
-          ) : nnList.length === 0 ? (
-            <p className="text-sm" style={{ color: 'var(--color-muted)' }}>No non-negotiables set yet.</p>
           ) : (
-            <ul className="flex flex-col gap-1.5">
-              {nnList.map((item, i) => {
-                const done = nnDone.includes(i)
-                return (
-                  <li key={i} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5" style={{ background: 'var(--color-bg)' }}>
-                    <button onClick={() => toggleNN(i)} className="h-4 w-4 rounded grid place-items-center shrink-0"
-                      style={{ border: '2px solid var(--color-accent)', background: done ? 'var(--color-accent)' : 'transparent' }} aria-label="Toggle">
-                      {done && <IconCheck width={11} height={11} style={{ color: 'var(--color-on-accent)' }} />}
-                    </button>
-                    <span className="text-sm" style={{ color: 'var(--color-text)', textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.5 : 1 }}>{item}</span>
-                  </li>
-                )
-              })}
-            </ul>
+            <div className="flex flex-col gap-4">
+              {/* Rolando's list: everyone ticks it off, only he can change it. */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>
+                    Set by Rolando
+                  </span>
+                  {role === 'assistant' && (
+                    <span className="text-[11px]" style={{ color: 'var(--color-muted)' }} title="Only Rolando can change these">🔒</span>
+                  )}
+                </div>
+                {nnList.length === 0 ? (
+                  <p className="text-sm" style={{ color: 'var(--color-muted)' }}>Nothing set yet.</p>
+                ) : (
+                  <ul className="flex flex-col gap-1.5">
+                    {nnList.map((item, i) => (
+                      <NnRow key={`o${i}`} item={item} done={nnDone.includes(`o:${i}`)} onToggle={() => toggleNN(`o:${i}`)} />
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* The assistant's own. Added here, removed here, nobody else's
+                  business — but visible to Rolando, because a standard you set
+                  for yourself is worth him seeing you hold. */}
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-wide mb-1.5" style={{ color: 'var(--color-muted)' }}>
+                  {role === 'assistant' ? 'Mine' : `${ASSISTANT_NAME}’s own`}
+                </div>
+                {ownList.length === 0 && role !== 'assistant' ? (
+                  <p className="text-sm" style={{ color: 'var(--color-muted)' }}>{ASSISTANT_NAME} hasn’t added any yet.</p>
+                ) : (
+                  <ul className="flex flex-col gap-1.5">
+                    {ownList.map((item, i) => (
+                      <NnRow key={`a${i}`} item={item} done={nnDone.includes(`a:${i}`)} onToggle={() => toggleNN(`a:${i}`)}
+                        onRemove={role === 'assistant' ? () => void removeOwn(i) : undefined} />
+                    ))}
+                  </ul>
+                )}
+                {role === 'assistant' && (
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <Input value={ownDraft} onChange={(e) => setOwnDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') void addOwn() }}
+                      placeholder="Add one of your own…" className="text-sm" />
+                    <Button variant="outline" className="px-2.5 shrink-0" onClick={() => void addOwn()} aria-label="Add">
+                      <IconPlus width={15} height={15} />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </Card>
 
