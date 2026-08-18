@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, Button, Input, EmptyState } from '../../components/ui'
 import { IconTrash, IconMic, IconSpark, IconCheck } from '../../components/icons'
-import { WsShell, BrandLogo, BRAND_OPTIONS, wsField } from '../../components/WorkspaceLayout'
+import { WsShell, BrandLogo, BRAND_OPTIONS, wsField, AI_STUDIO_ENABLED } from '../../components/WorkspaceLayout'
 import { transcribeBlob } from '../../lib/transcribe'
 import { useConfirmDelete } from '../../lib/confirmDelete'
 import { useToast } from '../../lib/toast'
@@ -282,7 +282,9 @@ export default function WsIdeas() {
 
                     <div className="flex items-center gap-1.5">
                       <Button variant="outline" className="text-xs px-2.5 py-1.5" onClick={() => void toContent(idea)}>→ Content</Button>
-                      <Button variant="outline" className="text-xs px-2.5 py-1.5" onClick={() => toAiStudio(idea)}>✨ → AI Studio</Button>
+                      {AI_STUDIO_ENABLED && (
+                        <Button variant="outline" className="text-xs px-2.5 py-1.5" onClick={() => toAiStudio(idea)}>✨ → AI Studio</Button>
+                      )}
                       <Button variant="outline" className="text-xs px-2.5 py-1.5" onClick={() => void toTask(idea)}>→ Task</Button>
                       <button
                         onClick={() => confirmDelete({

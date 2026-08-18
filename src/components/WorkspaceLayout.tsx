@@ -11,6 +11,16 @@ import { useWorkspace, BRAND_COLORS } from '../lib/workspace'
  * (AssistantApp), which provides sidebar/bottom-nav navigation instead.
  */
 
+/**
+ * AI Studio is hidden for now.
+ *
+ * The page, its routes, its brand-kit panel and its Netlify functions are all
+ * still here and still work — this only takes the feature out of the
+ * navigation and off the Idea Board, so flipping this back to true restores
+ * it exactly as it was. Nothing was deleted.
+ */
+export const AI_STUDIO_ENABLED = false
+
 export const WS_SECTIONS = [
   { to: '/workspace/home', label: 'Home', Icon: IconHome },
   { to: '/workspace/tasks', label: 'Tasks', Icon: IconTasks },
@@ -19,8 +29,8 @@ export const WS_SECTIONS = [
   { to: '/workspace/journal', label: 'Journal', Icon: IconJournal },
   { to: '/workspace/media', label: 'Media', Icon: IconFolder },
   { to: '/workspace/approvals', label: 'Approvals', Icon: IconStamp },
-  { to: '/workspace/ai', label: 'AI Studio', Icon: IconSpark },
-  // Trends feeds AI Studio, so it sits directly beneath it.
+  // Trends feeds AI Studio, so it sits directly beneath it when shown.
+  ...(AI_STUDIO_ENABLED ? [{ to: '/workspace/ai', label: 'AI Studio', Icon: IconSpark }] : []),
   { to: '/workspace/trends', label: 'Trends', Icon: IconTrend },
 ]
 
