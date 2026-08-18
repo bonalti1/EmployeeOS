@@ -12,14 +12,18 @@ import { useWorkspace, BRAND_COLORS } from '../lib/workspace'
  */
 
 /**
- * AI Studio is hidden for now.
+ * Features hidden for now — hidden, not removed.
  *
- * The page, its routes, its brand-kit panel and its Netlify functions are all
- * still here and still work — this only takes the feature out of the
- * navigation and off the Idea Board, so flipping this back to true restores
- * it exactly as it was. Nothing was deleted.
+ * Every page behind these flags still exists and still works: WsAiStudio and
+ * WsTrends, their routes, the brand-kit panel and the studio Netlify
+ * functions are all untouched. A flag rather than a commented-out block keeps
+ * that code compiling with the rest of the app, so it cannot quietly rot
+ * while it is out of sight, and turning a feature back on is one boolean.
+ *
+ * Trends only ever fed AI Studio, so the two travel together.
  */
 export const AI_STUDIO_ENABLED = false
+export const TRENDS_ENABLED = false
 
 export const WS_SECTIONS = [
   { to: '/workspace/home', label: 'Home', Icon: IconHome },
@@ -31,7 +35,7 @@ export const WS_SECTIONS = [
   { to: '/workspace/approvals', label: 'Approvals', Icon: IconStamp },
   // Trends feeds AI Studio, so it sits directly beneath it when shown.
   ...(AI_STUDIO_ENABLED ? [{ to: '/workspace/ai', label: 'AI Studio', Icon: IconSpark }] : []),
-  { to: '/workspace/trends', label: 'Trends', Icon: IconTrend },
+  ...(TRENDS_ENABLED ? [{ to: '/workspace/trends', label: 'Trends', Icon: IconTrend }] : []),
 ]
 
 export const wsField: CSSProperties = { background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }
