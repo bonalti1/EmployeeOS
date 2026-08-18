@@ -1,4 +1,8 @@
 import { useRef, useState } from 'react'
+import {
+  DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors,
+  useDraggable, useDroppable, type DragStartEvent, type DragEndEvent,
+} from '@dnd-kit/core'
 import { Card, Button, Input } from '../../components/ui'
 import { IconCheck, IconPlus, IconTrash, IconTasks } from '../../components/icons'
 import { WsShell, PriorityBadge, wsField } from '../../components/WorkspaceLayout'
@@ -25,6 +29,37 @@ const LISTS: { id: WsTask['status']; label: string }[] = [
 
 const PRIORITY_ORDER: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
 const WDAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+/**
+ * Drag-and-drop planning: any task can be picked up and dropped on a day
+ * column (schedules it there) or back on the Master List (unschedules it).
+ *
+ * Activation is deliberately not instant. On mouse the pointer must travel
+ * 6px before a drag starts, so every click on a checkbox or title still lands
+ * as a click. On touch the finger must HOLD for a beat first — a quick swipe
+ * scrolls the day strip like it always did, a hold lifts the task. Without
+ * that split, drag and scroll fight over every touch and the phone loses.
+ */
+
+/** A task row anyone can pick up. Renders the <li> itself so it slots into
+ * the existing lists, and fades while its ghost travels in the DragOverlay. */
+function DragRow({ id, className, style, children }: {
+  id: string; className?: string; style?: React.CSSProperties; children: React.ReactNode
+}) {
+  const { setNodeRef, listeners, attributes, isDragging } = useDraggable({ id })
+  return (
+    <li ref={setNodeRef} {...listeners} {...attributes} className={className}
+      style={{ ...style, opacity: isDragging ? 0.35 : 1, touchAction: 'manipulation', cursor: 'grab' }}>
+      {children}
+    </li>
+  )
+}
+
+/** A surface a task can land on. Lights up while a drag hovers over it. */
+function DropZone({ id, className, children }: { id: string; className?: string; children: (over: boolean) => React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id })
+  return <div ref={setNodeRef} className={className}>{children(isOver)}</div>
+}
 
 // ---- Local date helpers (all local-time, YYYY-MM-DD) ----------------------
 const toISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -110,6 +145,33 @@ export default function WsTasks() {
     else void update(t.id, { status: 'done', completed_at: new Date().toISOString() } as Partial<WsTask>)
   }
 
+  // ---- Drag to plan -------------------------------------------------------
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
+  )
+  const [dragTask, setDragTask] = useState<WsTask | null>(null)
+
+  const onDragStart = (e: DragStartEvent) => {
+    setDragTask(all.find((t) => t.id === String(e.active.id)) ?? null)
+  }
+
+  /** Drop targets are day ISO dates plus 'unschedule' (the Master List).
+   * A completed task keeps its checkmark wherever it is dropped — moving a
+   * task is planning, not un-finishing it. */
+  const onDragEnd = (e: DragEndEvent) => {
+    const t = dragTask
+    setDragTask(null)
+    if (!t || !e.over) return
+    const dest = String(e.over.id)
+    const iso = dest === 'unschedule' ? null : dest
+    if (iso === t.due) return
+    void update(t.id, {
+      due: iso,
+      status: t.status === 'done' ? 'done' : t.status === 'waiting' ? 'waiting' : scheduleStatus(iso),
+    } as Partial<WsTask>)
+  }
+
   const patchSelected = (values: Partial<WsTask>) => {
     if (!selected) return
     setSelected({ ...selected, ...values })
@@ -119,7 +181,7 @@ export default function WsTasks() {
   const Row = ({ t, badge }: { t: WsTask; badge?: string }) => {
     const done = t.status === 'done'
     return (
-      <li className="group flex items-center gap-2.5 rounded-lg px-2 py-2"
+      <DragRow id={t.id} className="group flex items-center gap-2.5 rounded-lg px-2 py-2"
         style={{ background: selected?.id === t.id ? 'color-mix(in srgb, var(--color-accent) 8%, var(--color-bg))' : 'var(--color-bg)' }}>
         <button onClick={() => toggleDone(t)} className="h-[18px] w-[18px] rounded grid place-items-center shrink-0"
           style={{ border: '2px solid var(--color-accent)', background: done ? 'var(--color-accent)' : 'transparent' }} aria-label="Toggle done">
@@ -140,7 +202,7 @@ export default function WsTasks() {
           className="opacity-0 group-hover:opacity-60 shrink-0" style={{ color: 'var(--color-muted)' }} aria-label="Delete">
           <IconTrash width={13} height={13} />
         </button>
-      </li>
+      </DragRow>
     )
   }
 
@@ -209,6 +271,7 @@ export default function WsTasks() {
       title="Tasks"
       subtitle={role === 'owner' ? `Plan ${ASSISTANT_NAME}'s week — anything you add here is assigned to him` : 'Plan your week, then work the list'}
     >
+      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragTask(null)}>
       {/* Week navigation */}
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <div className="flex items-center gap-2">
@@ -244,7 +307,14 @@ export default function WsTasks() {
           const dayTasks = all.filter((t) => t.due === iso && byCat(t))
             .sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0) || PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority])
           return (
-            <Card key={iso} className="p-3 shrink-0 w-[168px] flex flex-col" style={isToday ? { border: '1.5px solid var(--color-accent)' } : undefined}>
+            <DropZone key={iso} id={iso} className="shrink-0 w-[168px] flex">
+              {(over) => (
+            <Card className="p-3 flex-1 flex flex-col transition-shadow"
+              style={{
+                border: over ? '1.5px solid var(--color-accent)' : isToday ? '1.5px solid var(--color-accent)' : undefined,
+                boxShadow: over ? '0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent)' : undefined,
+                background: over ? 'color-mix(in srgb, var(--color-accent) 6%, var(--color-surface))' : undefined,
+              }}>
               <div className="flex items-baseline justify-between mb-2">
                 <span className="font-bold text-sm" style={{ color: isToday ? 'var(--color-accent)' : 'var(--color-text)' }}>{WDAY_SHORT[i]}</span>
                 <span className="text-xs tnum" style={{ color: 'var(--color-muted)' }}>{monthShort(d)} {d.getDate()}</span>
@@ -253,7 +323,7 @@ export default function WsTasks() {
                 {dayTasks.map((t) => {
                   const done = t.status === 'done'
                   return (
-                    <li key={t.id} className="flex items-start gap-1.5">
+                    <DragRow key={t.id} id={t.id} className="flex items-start gap-1.5">
                       <button onClick={() => toggleDone(t)} className="h-4 w-4 rounded grid place-items-center shrink-0 mt-0.5"
                         style={{ border: '2px solid var(--color-accent)', background: done ? 'var(--color-accent)' : 'transparent' }} aria-label="Toggle done">
                         {done && <IconCheck width={10} height={10} style={{ color: 'var(--color-on-accent)' }} />}
@@ -262,7 +332,7 @@ export default function WsTasks() {
                         <span className="text-xs leading-snug block" style={{ color: done ? 'var(--color-muted)' : 'var(--color-text)', opacity: done ? 0.6 : 1 }}>{t.title}</span>
                         <span className="mt-0.5 inline-flex"><CatLogo cat={t.category} size={11} /></span>
                       </button>
-                    </li>
+                    </DragRow>
                   )
                 })}
               </ul>
@@ -287,13 +357,18 @@ export default function WsTasks() {
                 <button onClick={() => setAddingDay(iso)} className="text-xs font-semibold text-left mt-1.5" style={{ color: 'var(--color-accent)' }}>+ Add</button>
               )}
             </Card>
+              )}
+            </DropZone>
           )
         })}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_340px] items-start">
-        {/* Master List */}
-        <Card className="p-4">
+        {/* Master List — also the drop target that takes a task OFF a day */}
+        <DropZone id="unschedule">
+          {(over) => (
+        <Card className="p-4"
+          style={over ? { border: '1.5px solid var(--color-accent)', boxShadow: '0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent)' } : undefined}>
           <div className="flex items-center justify-between mb-1">
             <h3 className="font-bold" style={{ color: 'var(--color-text)' }}>Master List</h3>
             <span className="text-xs tnum" style={{ color: 'var(--color-muted)' }}>{inbox.length + thisWeek.length + other.length} open</span>
@@ -362,6 +437,8 @@ export default function WsTasks() {
             </div>
           )}
         </Card>
+          )}
+        </DropZone>
 
         {/* Detail editor — sticky side panel on desktop */}
         <Card className="p-4 h-fit lg:sticky lg:top-6 hidden lg:block">
@@ -373,6 +450,23 @@ export default function WsTasks() {
 
       {/* Phone: the same editor as a bottom sheet, so tapping a task never
           scrolls you away from the list. */}
+      {/* The travelling ghost. A DragOverlay escapes the scroll containers,
+          so the task stays visible even when its column is clipped. */}
+      <DragOverlay dropAnimation={null}>
+        {dragTask && (
+          <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold"
+            style={{
+              background: 'var(--color-surface)', color: 'var(--color-text)',
+              border: '1.5px solid var(--color-accent)', boxShadow: '0 12px 32px -8px rgba(0,0,0,0.45)',
+              cursor: 'grabbing', maxWidth: 240,
+            }}>
+            <CatLogo cat={dragTask.category} size={14} />
+            <span className="truncate">{dragTask.title}</span>
+          </div>
+        )}
+      </DragOverlay>
+      </DndContext>
+
       {selected && (
         <div className="lg:hidden fixed inset-0 z-50">
           <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={() => setSelected(null)} />
