@@ -37,6 +37,30 @@ const regionLuma = (ctx: CanvasRenderingContext2D, x: number, y: number, w: numb
   }
 }
 
+/** Mean brightness (0–1) of the mark's own opaque pixels. A card is only the
+ * right answer when a DARK mark lands on a dark field — putting a white card
+ * behind a white mark is the same disappearing act in reverse. */
+const markLuma = (img: HTMLImageElement): number => {
+  try {
+    const c = document.createElement('canvas')
+    c.width = Math.min(64, img.naturalWidth)
+    c.height = Math.max(1, Math.round((img.naturalHeight / img.naturalWidth) * c.width))
+    const g = c.getContext('2d', { willReadFrequently: true })!
+    g.drawImage(img, 0, 0, c.width, c.height)
+    const { data } = g.getImageData(0, 0, c.width, c.height)
+    let sum = 0
+    let n = 0
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 40) continue                      // keyed-out background
+      sum += (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255
+      n++
+    }
+    return n ? sum / n : 0
+  } catch {
+    return 0   // unreadable: assume a dark mark, which is the common case
+  }
+}
+
 const loadImage = (src: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     const img = new Image()
@@ -87,7 +111,7 @@ export async function composeAd(opts: {
     // A logo carries its own colours, so on a dark panel it simply vanishes.
     // Measure what it is about to land on and, if it is dark, set it on a
     // white card — the way a real brand guideline handles reversed backgrounds.
-    if (opts.autoCard && regionLuma(ctx, x, y, lw, lh) < 0.55) {
+    if (opts.autoCard && regionLuma(ctx, x, y, lw, lh) < 0.55 && markLuma(logo) < 0.62) {
       const cp = Math.round(lw * 0.09)
       ctx.save()
       ctx.shadowColor = 'rgba(0,0,0,0.25)'

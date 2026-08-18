@@ -13,7 +13,7 @@ import BrandKitPanel from './BrandKitPanel'
 import { BRAND_KEYS, BRAND_LABEL, kitKey, parseKit, kitSummary, toLogoDataUrl, type BrandKey } from '../../lib/brandKit'
 import { listPhotos, photoToDataUrl, type WsPhoto } from '../../lib/wsPhotos'
 import { composeAd } from '../../lib/composeAd'
-import { composeFlyer, logoWithAlpha, type FlyerTemplate, type LogoPos } from '../../lib/adLayout'
+import { composeFlyer, flyerScaffold, logoWithAlpha, type FlyerTemplate, type LogoPos } from '../../lib/adLayout'
 import { MENTORS } from '../../lib/mentors'
 
 /**
@@ -66,35 +66,49 @@ type PhotoMode = 'design' | 'real' | 'ai'
 /** The ChatGPT-style whole-flyer prompt. The model designs and typesets the
  * entire layout — this is why ChatGPT flyers look designed rather than
  * assembled: the typography is rendered natively into the image. */
+/**
+ * Art direction for the AI-designed flyer.
+ *
+ * Written as a finishing brief, not a wishlist. The composition already
+ * arrived as a scaffold (see `flyerScaffold`), so this asks for the one thing
+ * still missing — typography in the reserved field — and spends the rest of
+ * its words pinning down what must not move. Image models weigh a long list
+ * of "no X" poorly (naming a colour to forbid is still naming it), so the
+ * constraints are stated positively wherever they can be, and structure is
+ * enforced by the scaffold rather than by adjectives like "agency-grade".
+ */
 const flyerDesignPrompt = (o: {
   brandLabel: string; headline: string; subhead?: string; cta?: string
   colors?: string[]; headingFont?: string; logoPos: LogoPos
 }) => {
   const corner = o.logoPos.replace(/-/g, ' ')
+  // The scaffold puts the coloured field along the bottom, so a bottom-corner
+  // logo is reserved out of that field and a top-corner one out of the
+  // photograph. Naming the wrong surface is how type ends up under the mark.
+  const reserved = o.logoPos.startsWith('bottom')
+    ? `the ${corner} of the coloured field`
+    : `the ${corner} corner of the photograph`
   return [
-    `Design a premium ${o.brandLabel} marketing flyer using the supplied photograph as the hero image.`,
+    'Finish this flyer. The supplied image IS the layout, already art-directed: a photograph across the top, and beneath it a solid brand-coloured field left deliberately blank for type.',
 
-    'THE PHOTOGRAPH IS THE HERO. It must fill at least 60% of the canvas — a large, uncropped, dominant image, not a thin strip between coloured bars. Everything else is supporting.',
+    'Hold the supplied image exactly as it is — the photograph keeps its crop, proportions, architecture, materials, colours and light, and the coloured field keeps its exact size and hex. Treat both as fixed plates: the only pixels you change are the ones you set type on.',
 
-    'CRITICAL: the photographed building must stay EXACTLY as shot — same architecture, materials, colours, windows, roofline, landscaping. Do not repaint, rebuild or re-imagine any part of the photo. The layout and typography are yours to design; the house is not.',
-
-    'Set this copy in clean, modern typography — large, perfectly spelled, legible on a phone:',
-    `HEADLINE: "${o.headline}"`,
-    o.subhead ? `SUPPORTING LINE: "${o.subhead}"` : '',
+    'Your single job is to typeset the blank coloured field the way a senior art director would:',
+    `HEADLINE — the largest type on the flyer, two lines at most: "${o.headline}"`,
+    o.subhead ? `SUPPORTING LINE — one quiet line beneath it, roughly a third the headline size: "${o.subhead}"` : '',
     o.cta
-      ? `CALL TO ACTION (must appear, styled as a solid button or pill): "${o.cta}"`
-      : 'CALL TO ACTION: end with a clear, simple ask styled as a solid button — e.g. "Send us a message".',
+      ? `CALL TO ACTION — set inside a solid rounded pill so it reads as a button: "${o.cta}"`
+      : 'CALL TO ACTION — close with a short ask set inside a solid rounded pill, e.g. "Send us a message".',
 
-    'DO NOT WRITE THE COMPANY NAME ANYWHERE. No wordmark, no logo, no monogram, no brand icon, no "builders" lockup — none. The real logo file is composited on afterwards, and a drawn one collides with it.',
-    `Instead, leave a clean, EMPTY, LIGHT-COLOURED area at the ${corner} — roughly a quarter of the width and free of text, texture and dark panels — reserved for that logo.`,
+    `Leave ${reserved} completely clear — empty of type, rules and shapes. The real logo file is composited into that space afterwards, so the flyer itself carries no company name, wordmark, monogram or brand icon of any kind.`,
 
+    'Typography: left-aligned, white or near-white on the coloured field, tight leading, a clear size jump between headline and supporting line, and margins as generous as the type is large. Every word perfectly spelled.',
+    o.headingFont ? `Set the headline in a face like ${o.headingFont}.` : '',
     o.colors?.length
-      ? `Brand colours — use ONLY these, and use the first as the dominant one: ${o.colors.slice(0, 3).join(', ')}. Every panel, band and button must be one of these exact colours. No orange, no teal, no invented accent colours.`
+      ? `The pill may use ${o.colors.slice(0, 2).join(' or ')} — the palette on the flyer stays exactly what the supplied image already contains.`
       : '',
-    o.headingFont ? `The headline typeface should feel like ${o.headingFont}.` : '',
 
-    'Layout discipline: at most TWO solid colour areas total — do not stack the flyer into horizontal stripes. Generous margins, one clear focal point, strong contrast between text and its background, and real breathing room around the type.',
-    'Art direction: top-agency, Fortune-500 grade — the kind of flyer a national homebuilder would run. No people, no watermarks, no fake badges, awards or star ratings, no gibberish or duplicated letters, no stock-photo collage.',
+    'Add nothing else: no people, no extra graphics or icons, no badges, awards or ratings, no borders, no watermarks, no invented copy beyond the lines above.',
   ].filter(Boolean).join('\n')
 }
 
@@ -491,9 +505,25 @@ export default function WsAiStudio() {
         headingFont: kit.headingFont,
         logoPos,
       })
+      // Hand the model a finished composition rather than a bare photo: the
+      // shot is already placed, the brand field is already the right hex and
+      // the right size, and only the typography is missing. If the scaffold
+      // cannot be built (a photo the canvas is not allowed to read back), fall
+      // back to the raw shot — a weaker flyer beats no flyer.
+      setImgNote('Laying out the flyer…')
+      let plate = srcPhoto
+      try {
+        plate = await flyerScaffold({
+          photoUrl: srcPhoto,
+          aspect: imgAspect,
+          primary: kit.colors?.[0],
+          accent: kit.colors?.[1] || kit.colors?.[0],
+        })
+      } catch { /* keep the raw photo */ }
+
       setImgNote('Designing the flyer…')
       const r = await post('studio-image', {
-        prompt, aspect: imgAspect, quality: hd ? 'high' : 'medium', sourcePhoto: srcPhoto,
+        prompt, aspect: imgAspect, quality: hd ? 'high' : 'medium', sourcePhoto: plate,
       })
       const url = String(r.dataUrl || r.url || '')
       if (!url) {

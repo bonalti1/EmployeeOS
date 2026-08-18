@@ -309,3 +309,57 @@ export async function composeFlyer(o: {
 
   return canvas.toDataURL('image/jpeg', 0.92)
 }
+
+/**
+ * Layout scaffold for the AI-designed flyer.
+ *
+ * Designed mode used to hand gpt-image-1 a bare photograph and ask it, in
+ * prose, to shrink that shot to 60% of the canvas and build a layout around
+ * it — while `input_fidelity: high` was simultaneously telling it to preserve
+ * the supplied image exactly. Those two instructions pull against each other,
+ * and the model splits the difference the only way it can: by banding the
+ * flyer into stripes. Every "template-grade / striped layout" complaint traces
+ * back to that tension, not to the wording of the art direction.
+ *
+ * So the composition is decided here rather than requested. The photo is
+ * placed full-bleed across the top band at the exact output size, the lower
+ * band is filled with the true brand hex and left deliberately EMPTY, and the
+ * seam carries a thin accent rule. What now reaches the model is already
+ * correctly proportioned, so high fidelity works FOR the design instead of
+ * against it: the photo is pinned, the palette is exact, "photo ≥ 60%" and
+ * "at most two colour areas" are structural facts rather than pleas. The one
+ * job left is typesetting the empty field — the thing the model is genuinely
+ * better at than canvas code.
+ */
+export async function flyerScaffold(o: {
+  photoUrl: string
+  aspect?: 'portrait' | 'square' | 'story'
+  primary?: string
+  accent?: string
+}): Promise<string> {
+  // These MUST match studio-image's SIZES exactly. If they drift, the edits
+  // endpoint rescales the scaffold and the reserved field stops landing where
+  // the prompt says it is.
+  const W = 1024
+  const H = o.aspect === 'square' ? 1024 : 1536
+  const photoPct = o.aspect === 'square' ? 0.66 : 0.62
+
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')!
+
+  const photo = await loadImage(o.photoUrl)
+  const photoH = Math.round(H * photoPct)
+  drawCover(ctx, photo, photo.naturalWidth, photo.naturalHeight, 0, 0, W, photoH)
+
+  // One solid field, in the exact brand hex — no approximation to drift from,
+  // and no second stripe for the model to copy into a third and a fourth.
+  ctx.fillStyle = o.primary || '#122251'
+  ctx.fillRect(0, photoH, W, H - photoH)
+
+  const rule = Math.max(4, Math.round(H * 0.005))
+  ctx.fillStyle = o.accent || '#ff5a4e'
+  ctx.fillRect(0, photoH, W, rule)
+
+  return canvas.toDataURL('image/png')
+}
