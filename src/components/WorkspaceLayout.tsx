@@ -148,13 +148,18 @@ export function WsShell({ title, subtitle, action, children }: {
         <Card className="p-6 text-sm" style={{ color: 'var(--color-muted)' }}>Loading workspace…</Card>
       ) : !ready ? (
         <Card className="p-6">
-          <p className="font-semibold" style={{ color: 'var(--color-text)' }}>One-time workspace setup</p>
+          <p className="font-semibold" style={{ color: 'var(--color-text)' }}>Almost in — your account needs to be added</p>
           <p className="text-sm mt-1.5 leading-relaxed" style={{ color: 'var(--color-muted)' }}>
-            The shared workspace tables aren't set up yet (or your login isn't registered as the owner).
-            Open Supabase → SQL Editor, paste the contents of <b>supabase/assistant_workspace.sql</b> from this
-            project, and run it. It creates the shared tables, locks them to workspace members with Row Level
-            Security, and registers <b>your</b> account as the owner. Then reload this page. Full walkthrough:
-            <b> ASSISTANT_WORKSPACE_SETUP.md</b>.
+            Your account exists, but it isn't a member of this workspace yet.
+            <b> Joining the team?</b> You're done — ask Rolando to add your account, then reload this page.
+            Nothing to install, nothing to configure on your side.
+          </p>
+          <p className="text-sm mt-2.5 leading-relaxed" style={{ color: 'var(--color-muted)' }}>
+            <b>Setting the workspace up as the owner?</b> Open Supabase → SQL Editor and run
+            <b> supabase/assistant_workspace.sql</b> from this project — it creates the shared tables, locks
+            them with Row Level Security, and registers your account as the owner. To add a teammate
+            afterwards, insert their account into <b>workspace_members</b> (see
+            <b> ASSISTANT_WORKSPACE_SETUP.md</b>).
           </p>
         </Card>
       ) : (
