@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Card, Button, Input, EmptyState } from '../../components/ui'
 import { IconPlus, IconTrash, IconFolder, IconLink } from '../../components/icons'
-import { WsShell, BrandBadge, wsField } from '../../components/WorkspaceLayout'
+import { WsShell, wsField } from '../../components/WorkspaceLayout'
 import { useConfirmDelete } from '../../lib/confirmDelete'
 import { useWsTable, ASSISTANT_NAME, type WsMediaLink } from '../../lib/workspace'
 
@@ -10,11 +10,12 @@ import { useWsTable, ASSISTANT_NAME, type WsMediaLink } from '../../lib/workspac
  * stores media in localStorage or the database, just the folder/file URLs.
  */
 
-const GROUPS: { title: string; brand: WsMediaLink['brand']; kind: WsMediaLink['kind'] }[] = [
-  { title: 'STB — Raw footage', brand: 'STB', kind: 'raw' },
-  { title: 'STB — Finished content', brand: 'STB', kind: 'finished' },
-  { title: 'ALTO — Raw footage', brand: 'ALTO', kind: 'raw' },
-  { title: 'ALTO — Finished content', brand: 'ALTO', kind: 'finished' },
+/** One Drive folder per publishing channel — the same three pipelines as the
+ * sidebar, so "where is that link?" is answered by where the video ships. */
+const CHANNELS: { title: string; hint: string; brand: WsMediaLink['brand'] }[] = [
+  { title: 'YouTube — Creando en ALTO', hint: 'The channel’s Drive folder — episodes, thumbnails, clips.', brand: 'YouTube' },
+  { title: 'STB TikTok', hint: 'South Texas Builders short-form Drive folder.', brand: 'STB' },
+  { title: 'Personal Brand — Marca Personal', hint: 'Carlos’s pipeline Drive folder.', brand: 'Personal' },
 ]
 
 function LinkRow({ link, onEdit, onRemove }: { link: WsMediaLink; onEdit: () => void; onRemove: () => void }) {
@@ -48,7 +49,9 @@ export default function WsMedia() {
   const [adding, setAdding] = useState<{ brand: WsMediaLink['brand']; kind: WsMediaLink['kind'] } | null>(null)
   const [draft, setDraft] = useState({ label: '', url: '', notes: '' })
 
-  const others = (rows ?? []).filter((l) => l.kind === 'other' || l.brand === 'General')
+  // Everything that isn't a channel slot lands here — including any links from
+  // the old raw/finished layout, so nothing saved before the redesign is lost.
+  const others = (rows ?? []).filter((l) => l.kind !== 'channel')
 
   const saveNew = async () => {
     if (!adding || !draft.label.trim()) return
@@ -63,33 +66,35 @@ export default function WsMedia() {
       subtitle="Google Drive links for raw footage and finished content — files stay in Drive, only links live here"
       action={<Button onClick={() => { setAdding({ brand: 'General', kind: 'other' }); setDraft({ label: '', url: '', notes: '' }) }}><IconPlus width={15} height={15} /> Add link</Button>}
     >
-      <div className="grid gap-5 md:grid-cols-2">
-        {GROUPS.map((g) => {
-          const links = (rows ?? []).filter((l) => l.brand === g.brand && l.kind === g.kind)
+      <div className="grid gap-5 md:grid-cols-3">
+        {CHANNELS.map((g) => {
+          // One slot per channel: the first channel-kind link for this brand.
+          const link = (rows ?? []).find((l) => l.kind === 'channel' && l.brand === g.brand)
           return (
             <Card key={g.title} className="p-5">
               <div className="flex items-center gap-2 mb-3">
                 <span style={{ color: 'var(--color-accent)' }}><IconFolder width={17} height={17} /></span>
                 <h2 className="text-[15px] font-semibold flex-1" style={{ color: 'var(--color-text)' }}>{g.title}</h2>
-                <BrandBadge brand={g.brand} />
-                <button onClick={() => { setAdding({ brand: g.brand, kind: g.kind }); setDraft({ label: '', url: '', notes: '' }) }}
-                  className="text-xs font-semibold" style={{ color: 'var(--color-accent)' }}>+ Add</button>
               </div>
-              {links.length === 0 ? (
-                <p className="text-sm" style={{ color: 'var(--color-muted)' }}>No links yet.</p>
-              ) : (
+              {link ? (
                 <ul className="flex flex-col gap-1.5">
-                  {links.map((l) => (
-                    <LinkRow key={l.id} link={l} onEdit={() => setEditing(l)}
-                      onRemove={() => confirmDelete({ label: `“${l.label}”`, onConfirm: () => void remove(l.id) })} />
-                  ))}
+                  <LinkRow link={link} onEdit={() => setEditing(link)}
+                    onRemove={() => confirmDelete({ label: `“${link.label}”`, onConfirm: () => void remove(link.id) })} />
                 </ul>
+              ) : (
+                <button
+                  onClick={() => { setAdding({ brand: g.brand, kind: 'channel' }); setDraft({ label: `${g.title} — Drive folder`, url: '', notes: '' }) }}
+                  className="w-full rounded-xl px-3 py-4 text-sm text-left"
+                  style={{ border: '1.5px dashed var(--color-border)', color: 'var(--color-muted)' }}>
+                  + Add the Google Drive link
+                  <span className="block text-xs mt-0.5">{g.hint}</span>
+                </button>
               )}
             </Card>
           )
         })}
 
-        <Card className="p-5 md:col-span-2">
+        <Card className="p-5 md:col-span-3">
           <h2 className="text-[15px] font-semibold mb-3" style={{ color: 'var(--color-text)' }}>Other links</h2>
           {others.length === 0 ? (
             <EmptyState icon={<IconFolder width={30} height={30} />} title="No other links" hint={`Brand kits, logo folders, music libraries — anything else ${ASSISTANT_NAME} needs.`} />

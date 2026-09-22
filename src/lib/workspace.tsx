@@ -167,8 +167,8 @@ export type WsSop = {
 
 export type WsMediaLink = {
   id: string
-  brand: 'STB' | 'ALTO' | 'General'
-  kind: 'raw' | 'finished' | 'other'
+  brand: 'STB' | 'ALTO' | 'General' | 'YouTube' | 'Personal'
+  kind: 'raw' | 'finished' | 'other' | 'channel'
   label: string
   url: string
   notes: string
