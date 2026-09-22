@@ -1,7 +1,7 @@
 import { createContext, useContext, type CSSProperties, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { Card, PageHeader } from './ui'
-import { IconHome, IconTasks, IconFilm, IconFolder, IconStamp, IconSpark, IconJournal, IconTrend, IconBulb } from './icons'
+import { IconHome, IconTasks, IconFilm, IconFolder, IconStamp, IconSpark, IconJournal, IconTrend, IconBulb , IconPlay , IconMegaphone } from './icons'
 import { useWorkspace, BRAND_COLORS } from '../lib/workspace'
 
 /**
@@ -30,6 +30,9 @@ export const WS_SECTIONS = [
   { to: '/workspace/tasks', label: 'Tasks', Icon: IconTasks },
   { to: '/workspace/ideas', label: 'Ideas', Icon: IconBulb },
   { to: '/workspace/content', label: 'Content', Icon: IconFilm },
+  { to: '/workspace/youtube', label: 'YouTube', Icon: IconPlay },
+  { to: '/workspace/stb-tiktok', label: 'STB TikTok', Icon: IconMegaphone },
+  { to: '/workspace/personal-brand', label: 'Personal Brand', Icon: IconTrend },
   { to: '/workspace/journal', label: 'Journal', Icon: IconJournal },
   { to: '/workspace/media', label: 'Media', Icon: IconFolder },
   { to: '/workspace/approvals', label: 'Approvals', Icon: IconStamp },

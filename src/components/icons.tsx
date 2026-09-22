@@ -216,6 +216,13 @@ export const IconBulb = (p: P) => (
   </svg>
 )
 
+export const IconPlay = (p: P) => (
+  <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <rect x="2.5" y="5" width="19" height="14" rx="4" />
+    <path d="M10.2 9.2 15 12l-4.8 2.8z" fill="currentColor" stroke="none" />
+  </svg>
+)
+
 export const IconMegaphone = (p: P) => (
   <svg {...base(p)}>
     <path d="M3 10v4a1 1 0 0 0 1 1h2l4 4V5L6 9H4a1 1 0 0 0-1 1Z" />

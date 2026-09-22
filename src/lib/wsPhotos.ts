@@ -71,3 +71,23 @@ export async function photoToDataUrl(url: string): Promise<string> {
     r.readAsDataURL(blob)
   })
 }
+
+// ---- Video planner thumbnails ----------------------------------------------
+// Candidate thumbnails live in the same bucket under `thumbs/`. One image per
+// planner card, replaced in place, so the path is keyed by the card's id.
+
+export async function uploadThumb(cardId: string, file: File): Promise<string> {
+  if (!supabase) return ''
+  const blob = await toUploadBlob(file, 1280)
+  const path = `thumbs/${cardId}.jpg`
+  const { error } = await supabase.storage.from(BUCKET).upload(path, blob, {
+    contentType: 'image/jpeg', upsert: true,
+  })
+  return error ? '' : path
+}
+
+export async function thumbUrl(path: string): Promise<string> {
+  if (!supabase || !path) return ''
+  const { data } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 8)
+  return data?.signedUrl || ''
+}

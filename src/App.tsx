@@ -24,6 +24,7 @@ import WsIdeas from './pages/workspace/WsIdeas'
 import IdeaCapture from './components/IdeaCapture'
 import WsMedia from './pages/workspace/WsMedia'
 import WsApprovals from './pages/workspace/WsApprovals'
+import WsPlanner from './pages/workspace/WsPlanner'
 import WsAiStudio from './pages/workspace/WsAiStudio'
 
 function useClockShort() {
@@ -93,6 +94,9 @@ export default function App() {
             <Route path="/workspace/journal" element={<WsJournal />} />
             <Route path="/workspace/media" element={<WsMedia />} />
             <Route path="/workspace/approvals" element={<WsApprovals />} />
+            <Route path="/workspace/youtube" element={<WsPlanner board="youtube" />} />
+            <Route path="/workspace/stb-tiktok" element={<WsPlanner board="stb_tiktok" />} />
+            <Route path="/workspace/personal-brand" element={<WsPlanner board="personal" />} />
             <Route path="/workspace/ai" element={<WsAiStudio />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/settings" element={<Settings />} />

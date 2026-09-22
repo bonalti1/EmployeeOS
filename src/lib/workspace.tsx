@@ -93,6 +93,27 @@ export type WsIdea = {
 
 export const IDEA_CATEGORIES = ['Unsorted', 'Content', 'Marketing', 'Business', 'Process'] as const
 
+/** One planned piece of content on a video board (YouTube / STB TikTok /
+ * Personal Brand). `clips` only carries entries on the YouTube board. */
+export type WsClip = { idea: string; shorts: string; reels: string }
+export type WsVideo = {
+  id: string
+  board: 'youtube' | 'stb_tiktok' | 'personal'
+  week_start: string
+  episode: number | null
+  category: '' | 'Lifestyle' | 'Business' | 'Construction'
+  title: string
+  description: string
+  link: string
+  thumb_path: string
+  status: 'planning' | 'ready' | 'published'
+  clips: WsClip[]
+  author_role: Role
+  created_at: string
+  updated_at: string
+}
+export const VIDEO_CATEGORIES = ['Lifestyle', 'Business', 'Construction'] as const
+
 export type TrendKind = 'sound' | 'hashtag' | 'format' | 'topic' | 'creator'
 
 export type WsTrend = {
