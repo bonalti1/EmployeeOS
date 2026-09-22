@@ -106,7 +106,7 @@ export type WsVideo = {
   description: string
   link: string
   thumb_path: string
-  status: 'planning' | 'ready' | 'published'
+  status: 'planned' | 'in_progress' | 'ready' | 'published'
   clips: WsClip[]
   author_role: Role
   created_at: string

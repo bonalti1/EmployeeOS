@@ -34,8 +34,8 @@ create table if not exists public.ws_videos (
   description text not null default '',
   link text not null default '',
   thumb_path text not null default '',
-  status text not null default 'planning'
-    check (status in ('planning','ready','published')),
+  status text not null default 'planned'
+    check (status in ('planned','in_progress','ready','published')),
   clips jsonb not null default '[]',
   author_role text not null default 'owner' check (author_role in ('owner','assistant')),
   created_at timestamptz not null default now(),
@@ -49,6 +49,15 @@ alter table public.ws_videos enable row level security;
 drop policy if exists "workspace members" on public.ws_videos;
 create policy "workspace members" on public.ws_videos
   for all using (public.ws_role() is not null) with check (public.ws_role() is not null);
+
+-- The status set grew after first ship (planned / in_progress / ready /
+-- published). Re-running this file migrates an existing table in place.
+alter table public.ws_videos drop constraint if exists ws_videos_status_check;
+update public.ws_videos set status = 'planned' where status = 'planning';
+alter table public.ws_videos
+  add constraint ws_videos_status_check
+  check (status in ('planned','in_progress','ready','published'));
+alter table public.ws_videos alter column status set default 'planned';
 
 do $$
 begin
