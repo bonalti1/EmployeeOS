@@ -101,11 +101,18 @@ export default function WsPlanner({ board }: { board: BoardId }) {
   const confirmDelete = useConfirmDelete()
 
   const [expanded, setExpanded] = useState<string | null>(null)
+  // Explicit fold choices; untouched cards fold once Published, because a
+  // shipped episode is a record, not a work surface. With the whole backlog
+  // on one page, folded history is what keeps the board scrollable.
+  const [folded, setFolded] = useState<Record<string, boolean>>({})
+  const isFolded = (v: WsVideo) => folded[v.id] ?? (v.status === 'published')
+  const toggleFold = (v: WsVideo) => setFolded((f) => ({ ...f, [v.id]: !isFolded(v) }))
   const [thumbs, setThumbs] = useState<Record<string, string>>({})
   const [uploading, setUploading] = useState('')
   const [editChannel, setEditChannel] = useState(false)
   const [chName, setChName] = useState('')
   const [chUrl, setChUrl] = useState('')
+  const [chWeek1, setChWeek1] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const fileFor = useRef<WsVideo | null>(null)
 
@@ -114,16 +121,39 @@ export default function WsPlanner({ board }: { board: BoardId }) {
 
   // The one channel all episodes go to — its name shows on every card, its
   // link lives behind "Channel ↗". Stored in ws_settings, so only the owner
-  // can change it (same rule as brand kits).
-  const channel = useMemo<{ name: string; url: string }>(() => {
-    try { return { name: '', url: '', ...JSON.parse(settings['yt_channel'] || '{}') } } catch { return { name: '', url: '' } }
+  // can change it (same rule as brand kits). week1 is the Monday the series
+  // started: with it set, weeks are numbered the way the team counts them
+  // ("week 5 of the channel"), not by the calendar's ISO week.
+  const channel = useMemo<{ name: string; url: string; week1: string }>(() => {
+    try { return { name: '', url: '', week1: '', ...JSON.parse(settings['yt_channel'] || '{}') } } catch { return { name: '', url: '', week1: '' } }
   }, [settings])
+
+  /** "Week 5" counted from the series' week 1 when it's set; the calendar's
+   * ISO week otherwise. A week before the series started gets no number. */
+  const weekTitle = (iso: string): string => {
+    if (cfg.quota > 0 && channel.week1) {
+      const n = Math.floor((fromISO(iso).getTime() - fromISO(channel.week1).getTime()) / (7 * 86400000)) + 1
+      return n >= 1 ? `Week ${n}` : 'Before week 1'
+    }
+    return `Week ${isoWeek(fromISO(iso))}`
+  }
 
   // Group by week, newest week first; the current week always renders, even
   // empty — that gap is exactly what the planner exists to make visible.
   const weeks = useMemo(() => {
     const map = new Map<string, WsVideo[]>()
     map.set(thisMonday, [])
+    // A series start makes history part of the board: every week since week 1
+    // renders, so a week that never got its video shows as a gap to claim
+    // instead of silently not existing.
+    if (cfg.quota > 0 && channel.week1) {
+      let probe = mondayISO(fromISO(channel.week1))
+      let guard = 0
+      while (probe <= thisMonday && guard++ < 520) {
+        if (!map.has(probe)) map.set(probe, [])
+        probe = toISO(addDays(fromISO(probe), 7))
+      }
+    }
     for (const v of mine) {
       const arr = map.get(v.week_start) ?? []
       arr.push(v)
@@ -133,7 +163,7 @@ export default function WsPlanner({ board }: { board: BoardId }) {
       arr.sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0) || a.created_at.localeCompare(b.created_at))
     }
     return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]))
-  }, [mine, thisMonday])
+  }, [mine, thisMonday, cfg.quota, channel.week1])
 
   // Signed URLs for every visible thumbnail, fetched once per path.
   useEffect(() => {
@@ -160,8 +190,11 @@ export default function WsPlanner({ board }: { board: BoardId }) {
     let week = weekIso ?? thisMonday
     if (!weekIso && cfg.quota > 0) {
       const planned = new Set(mine.map((v) => v.week_start))
-      let probe = thisMonday
-      while (planned.has(probe)) probe = toISO(addDays(fromISO(probe), 7))
+      // Backlog first: with a series start, the button claims the oldest
+      // uncovered week; without one it walks forward from this week.
+      let probe = channel.week1 ? mondayISO(fromISO(channel.week1)) : thisMonday
+      let guard = 0
+      while (planned.has(probe) && guard++ < 520) probe = toISO(addDays(fromISO(probe), 7))
       week = probe
     }
     const row = await insert({
@@ -295,12 +328,43 @@ export default function WsPlanner({ board }: { board: BoardId }) {
   }
 
   /** The YouTube week card: a full open dossier — header row (week · dates ·
-   * status · action), then thumbnail | episode brief | links. */
-  const episodeCard = (v: WsVideo) => (
+   * status · action), then thumbnail | episode brief | links. Folds to one
+   * thumbnail-height row so a season of history stays scrollable. */
+  const episodeCard = (v: WsVideo) => {
+    if (isFolded(v)) {
+      const img = v.thumb_path ? thumbs[v.thumb_path] : ''
+      return (
+        <Card key={v.id} className="overflow-hidden">
+          <button onClick={() => toggleFold(v)} className="w-full text-left">
+            <div className="flex items-center gap-3">
+              <div className="shrink-0 relative self-stretch" style={{ width: 104, minHeight: 58, background: 'var(--color-bg)' }}>
+                {img
+                  ? <img src={img} alt="" className="absolute inset-0 w-full h-full" style={{ objectFit: 'cover' }} />
+                  : <div className="absolute inset-0 grid place-items-center" style={{ color: 'var(--color-muted)' }}><IconFilm width={16} height={16} /></div>}
+                <span className="absolute bottom-1 right-1 rounded px-1 py-px text-[9px] font-bold" style={{ background: 'rgba(0,0,0,0.72)', color: '#fff' }}>EP.{v.episode ?? '—'}</span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap py-2 pr-2 flex-1 min-w-0">
+                <span className="rounded-md px-2 py-0.5 text-xs font-bold shrink-0" style={{ background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', color: 'var(--color-accent)' }}>
+                  {weekTitle(v.week_start)}
+                </span>
+                <span className="text-sm font-semibold truncate" style={{ color: v.title ? 'var(--color-text)' : 'var(--color-muted)' }}>{v.title || 'Untitled'}</span>
+                <span className="ml-auto shrink-0">{statusPill(v)}</span>
+              </div>
+              {v.link.trim() && (
+                <a href={v.link} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+                  className="shrink-0 rounded-full px-3 py-1.5 text-xs font-bold" style={{ background: '#dc2626', color: '#fff' }}>▶</a>
+              )}
+              <span className="shrink-0 pr-3 text-sm" style={{ color: 'var(--color-muted)' }}>▸</span>
+            </div>
+          </button>
+        </Card>
+      )
+    }
+    return (
     <Card key={v.id} className="p-4">
       <div className="flex items-center gap-2.5 flex-wrap mb-3">
         <span className="rounded-lg px-2.5 py-1 text-sm font-bold" style={{ background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', color: 'var(--color-accent)' }}>
-          Week {isoWeek(fromISO(v.week_start))}
+          {weekTitle(v.week_start)}
         </span>
         <span className="text-xs tnum" style={{ color: 'var(--color-muted)' }}>{weekLabel(v.week_start)}</span>
         {statusPill(v)}
@@ -317,6 +381,7 @@ export default function WsPlanner({ board }: { board: BoardId }) {
             style={{ color: 'var(--color-muted)' }} aria-label="Delete">
             <IconTrash width={15} height={15} />
           </button>
+          <button onClick={() => toggleFold(v)} className="text-sm px-1" style={{ color: 'var(--color-muted)' }} aria-label="Collapse" title="Collapse">▾</button>
         </div>
       </div>
 
@@ -387,7 +452,8 @@ export default function WsPlanner({ board }: { board: BoardId }) {
         </div>
       </div>
     </Card>
-  )
+    )
+  }
 
   /** Compact card for the short-form boards — tap to open, like Tasks. */
   const compactCard = (v: WsVideo) => {
@@ -450,7 +516,8 @@ export default function WsPlanner({ board }: { board: BoardId }) {
   }
 
   const saveChannel = async () => {
-    await setSetting('yt_channel', JSON.stringify({ name: chName.trim(), url: chUrl.trim() }))
+    const week1 = chWeek1 ? mondayISO(fromISO(chWeek1)) : ''
+    await setSetting('yt_channel', JSON.stringify({ name: chName.trim(), url: chUrl.trim(), week1 }))
     setEditChannel(false)
   }
 
@@ -467,7 +534,7 @@ export default function WsPlanner({ board }: { board: BoardId }) {
             </a>
           )}
           {board === 'youtube' && role === 'owner' && (
-            <Button variant="outline" className="text-sm px-3" onClick={() => { setChName(channel.name); setChUrl(channel.url); setEditChannel(!editChannel) }}>
+            <Button variant="outline" className="text-sm px-3" onClick={() => { setChName(channel.name); setChUrl(channel.url); setChWeek1(channel.week1); setEditChannel(!editChannel) }}>
               {channel.name ? '✎' : 'Set channel'}
             </Button>
           )}
@@ -480,11 +547,25 @@ export default function WsPlanner({ board }: { board: BoardId }) {
 
       {editChannel && (
         <Card className="p-4 mb-4">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Input value={chName} onChange={(e) => setChName(e.target.value)} placeholder="Channel name (e.g. Creando en ALTO)" />
-            <Input value={chUrl} onChange={(e) => setChUrl(e.target.value)} placeholder="Channel URL (https://youtube.com/@…)" />
-            <Button onClick={() => void saveChannel()}>Save</Button>
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+            <div className="flex-1 min-w-0">
+              <label className={labelCls} style={labelStyle}>Channel name</label>
+              <Input value={chName} onChange={(e) => setChName(e.target.value)} placeholder="e.g. Creando en ALTO" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <label className={labelCls} style={labelStyle}>Channel URL</label>
+              <Input value={chUrl} onChange={(e) => setChUrl(e.target.value)} placeholder="https://youtube.com/@…" />
+            </div>
+            <div className="shrink-0">
+              <label className={labelCls} style={labelStyle}>Week 1 of the series</label>
+              <input type="date" value={chWeek1} onChange={(e) => setChWeek1(e.target.value)}
+                className="w-full rounded-xl px-3 py-2 text-sm outline-none tnum block" style={wsField} />
+            </div>
+            <Button className="shrink-0" onClick={() => void saveChannel()}>Save</Button>
           </div>
+          <p className="text-xs mt-2" style={{ color: 'var(--color-muted)' }}>
+            Set “Week 1” to the week your series started and the board numbers weeks your way — every week since then shows up, including the ones still missing their video.
+          </p>
         </Card>
       )}
 
@@ -509,7 +590,7 @@ export default function WsPlanner({ board }: { board: BoardId }) {
                 <Card key={weekIso} className="p-4" style={{ borderStyle: 'dashed' }}>
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <span className="rounded-lg px-2.5 py-1 text-sm font-bold" style={{ background: 'var(--color-bg)', color: 'var(--color-muted)' }}>
-                      Week {isoWeek(fromISO(weekIso))}{isThisWeek ? ' — this week' : ''}
+                      {weekTitle(weekIso)}{isThisWeek ? ' — this week' : ''}
                     </span>
                     <span className="text-xs tnum" style={{ color: 'var(--color-muted)' }}>{weekLabel(weekIso)}</span>
                     <span className="text-[11px] font-bold" style={{ color: '#d97706' }}>nothing planned</span>
@@ -526,7 +607,7 @@ export default function WsPlanner({ board }: { board: BoardId }) {
             <div key={weekIso}>
               <div className="flex items-baseline gap-2 mb-2 flex-wrap">
                 <h3 className="font-bold text-sm" style={{ color: isThisWeek ? 'var(--color-accent)' : 'var(--color-text)' }}>
-                  Week {isoWeek(fromISO(weekIso))}{isThisWeek ? ' — this week' : ''}
+                  {weekTitle(weekIso)}{isThisWeek ? ' — this week' : ''}
                 </h3>
                 <span className="text-xs tnum" style={{ color: 'var(--color-muted)' }}>{weekLabel(weekIso)}</span>
                 <button onClick={() => void addCard(weekIso)} className="text-xs font-semibold ml-auto" style={{ color: 'var(--color-accent)' }}>+ Add here</button>
