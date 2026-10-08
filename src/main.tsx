@@ -4,8 +4,6 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import AssistantApp from './components/AssistantApp.tsx'
 import AuthGate from './components/AuthGate.tsx'
-import EmployeeApp from './components/EmployeeApp.tsx'
-import { empToken } from './lib/employee.ts'
 import { ThemeProvider } from './lib/theme.tsx'
 import { WorkspaceProvider, useWorkspace } from './lib/workspace.tsx'
 import { ToastProvider } from './lib/toast.tsx'
@@ -80,26 +78,7 @@ function RoleRouter() {
   return personalOverride ? <App /> : <AssistantApp />
 }
 
-/**
- * Field employees (Roberto first) sign in with a PIN at /employee, outside
- * AuthGate: no email account exists for them. A phone that already holds an
- * employee session and opens the bare site (e.g. from a home-screen icon,
- * whose start URL is /) is sent to /employee too.
- */
-const path = window.location.pathname
-if (path === '/' && empToken.get()) window.history.replaceState(null, '', '/employee')
-const isEmployee = window.location.pathname.startsWith('/employee')
-
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  isEmployee ? (
-    <React.StrictMode>
-      <ErrorBoundary>
-        <ThemeProvider>
-          <EmployeeApp />
-        </ThemeProvider>
-      </ErrorBoundary>
-    </React.StrictMode>
-  ) :
   <React.StrictMode>
     <ErrorBoundary>
     <ThemeProvider>

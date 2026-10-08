@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
-import { IconMenu, IconHome, IconTasks, IconFilm, IconJournal, IconAssistant } from './icons'
+import { IconMenu, IconHome, IconTasks, IconFilm, IconJournal } from './icons'
 import { BonaltiLogo } from './Logo'
 import { WS_SECTIONS, AssistantShell } from './WorkspaceLayout'
 import { useWorkspace, WORKSPACE_NAME } from '../lib/workspace'
@@ -16,7 +16,6 @@ import WsMedia from '../pages/workspace/WsMedia'
 import WsApprovals from '../pages/workspace/WsApprovals'
 import WsPlanner from '../pages/workspace/WsPlanner'
 import WsAiStudio from '../pages/workspace/WsAiStudio'
-import WsTeam from '../pages/workspace/WsTeam'
 
 /**
  * The Assistant OS — the entire app as seen by the Personal Assistant /
@@ -37,11 +36,7 @@ function useClock() {
 
 function AssistantSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const now = useClock()
-  const { userEmail, role } = useWorkspace()
-  // Team (field employees' OS) is Rolando's alone; Carlos never sees it.
-  const sections = role === 'owner'
-    ? [...WS_SECTIONS, { to: '/workspace/team', label: 'Team', Icon: IconAssistant }]
-    : WS_SECTIONS
+  const { userEmail } = useWorkspace()
   const hour = now.getHours() % 12 || 12
   const minute = String(now.getMinutes()).padStart(2, '0')
   const ampm = now.getHours() < 12 ? 'AM' : 'PM'
@@ -78,7 +73,7 @@ function AssistantSidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="flex-1 flex flex-col min-h-0">
         <div className="text-[10px] font-semibold uppercase tracking-[0.14em] mb-1 px-3 opacity-45">Menu</div>
         <nav className="flex-1 flex flex-col justify-between py-0.5">
-          {sections.map(({ to, label, Icon }) => (
+          {WS_SECTIONS.map(({ to, label, Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -175,7 +170,6 @@ function AssistantBottomNav({ onMore }: { onMore: () => void }) {
 
 export default function AssistantApp() {
   const [mobileOpen, setMobileOpen] = useState(false)
-  const { role } = useWorkspace()
   const location = useLocation()
 
   // Close the mobile drawer whenever navigation happens (back button, a link
@@ -222,7 +216,6 @@ export default function AssistantApp() {
             <Route path="/workspace/stb-tiktok" element={<WsPlanner board="stb_tiktok" />} />
             <Route path="/workspace/personal-brand" element={<WsPlanner board="personal" />} />
             <Route path="/workspace/ai" element={<WsAiStudio />} />
-            {role === 'owner' && <Route path="/workspace/team" element={<WsTeam />} />}
             {/* Anything else — including every private Personal OS URL — lands on the assistant home. */}
             <Route path="*" element={<Navigate to="/workspace/home" replace />} />
           </Routes>
